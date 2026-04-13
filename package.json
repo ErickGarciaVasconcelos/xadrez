@@ -1,0 +1,16 @@
+{
+  "name": "xadrez-online",
+  "version": "1.0.0",
+  "description": "Jogo de Xadrez Online em Tempo Real",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["chess", "socket.io", "multiplayer"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
+}
