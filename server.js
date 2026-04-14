@@ -94,12 +94,12 @@ io.on('connection', (socket) => {
         if (!gameState) return;
         
         gameState.board = moveData.board;
-        const nextPlayer = moveData.currentPlayer === 'white' ? 'black' : 'white';
-        gameState.currentPlayer = nextPlayer;
+        // Usa o currentPlayer enviado pelo cliente (já contém o próximo jogador)
+        gameState.currentPlayer = moveData.currentPlayer;
         
         socket.to(currentRoom).emit('opponentMove', {
             board: moveData.board,
-            currentPlayer: nextPlayer
+            currentPlayer: moveData.currentPlayer
         });
     });
     

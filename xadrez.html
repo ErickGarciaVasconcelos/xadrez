@@ -1563,10 +1563,11 @@
                     clearSelection();
                     
                     if (gameMode === 'online' && socket) {
-                        console.log('Emitting move, currentPlayer:', currentPlayer);
+                        const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
+                        console.log('Emitting move, currentPlayer (who moved):', currentPlayer, '-> nextPlayer:', nextPlayer);
                         socket.emit('makeMove', {
                             board: board,
-                            currentPlayer: currentPlayer
+                            currentPlayer: nextPlayer
                         });
                     }
                 } else {
