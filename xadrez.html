@@ -1352,8 +1352,10 @@
                 console.log('Received playerColor:', color);
                 playerColor = color;
                 currentPlayer = 'white';
+                isMyTurn = (color === 'white');
                 createBoard();
                 updateTurnIndicator();
+                console.log('isMyTurn inicial:', isMyTurn);
             });
             
             socket.on('gameState', (state) => {
@@ -1372,6 +1374,7 @@
             socket.on('gameStart', () => {
                 updateConnectionStatus('conectado', 'Oponente conectado!');
                 currentPlayer = 'white';
+                isMyTurn = (playerColor === 'white');
                 createBoard();
                 updateTurnIndicator();
             });
