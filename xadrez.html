@@ -1383,6 +1383,7 @@
             socket.on('opponentMove', (moveData) => {
                 board = moveData.board;
                 currentPlayer = moveData.currentPlayer;
+                isMyTurn = true;
                 createBoard();
                 updateTurnIndicator();
             });
