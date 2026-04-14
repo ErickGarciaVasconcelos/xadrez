@@ -1580,11 +1580,25 @@
         }
 
 function selectSquare(row, col) {
+            console.log('=== selectSquare called ===');
+            console.log('row:', row, 'col:', col);
+            
             clearSelection();
 
             const piece = board[row][col];
-            if (!piece) return;
-            if (piece.color !== currentPlayer) return;
+            console.log('Piece at position:', piece);
+            
+            if (!piece) {
+                console.log('NO PIECE at this position');
+                return;
+            }
+            
+            console.log('Piece color:', piece.color, 'Current player:', currentPlayer);
+            
+            if (piece.color !== currentPlayer) {
+                console.log('WRONG COLOR - cannot select');
+                return;
+            }
 
             selectedSquare = [row, col];
             const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
@@ -1595,6 +1609,7 @@ function selectSquare(row, col) {
             }
 
             const possibleMoves = getPossibleMoves(row, col);
+            console.log('Possible moves:', possibleMoves);
             possibleMoves.forEach(([moveRow, moveCol]) => {
                 const moveSquare = document.querySelector(`[data-row="${moveRow}"][data-col="${moveCol}"]`);
                 if (moveSquare) moveSquare.classList.add('possible-move');
