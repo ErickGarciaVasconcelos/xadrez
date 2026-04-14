@@ -1479,10 +1479,13 @@
                 console.error('Chessboard element not found');
                 return;
             }
-            console.log('Creating board');
+            console.log('Creating board - playerColor:', playerColor, 'currentPlayer:', currentPlayer);
             chessboard.innerHTML = '';
 
-            if (gameMode === 'online' && playerColor === 'black') {
+            const shouldFlip = (gameMode === 'online' && playerColor === 'black');
+            console.log('Tabuleiro será flipado:', shouldFlip);
+            
+            if (shouldFlip) {
                 chessboard.classList.add('flipped');
             } else {
                 chessboard.classList.remove('flipped');
