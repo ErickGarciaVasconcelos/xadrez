@@ -829,7 +829,6 @@
         }
 
         .chessboard.flipped .piece {
-            transform: rotate(180deg);
         }
 
         .square .piece {
@@ -1355,13 +1354,18 @@
                 isMyTurn = (color === 'white');
                 createBoard();
                 updateTurnIndicator();
-                console.log('isMyTurn inicial:', isMyTurn);
+                console.log('=== Jogador conectado ===');
+                console.log('playerColor:', playerColor);
+                console.log('currentPlayer:', currentPlayer);
+                console.log('isMyTurn:', isMyTurn);
+                console.log('Tabuleiro será criado com flip:', (color === 'black'));
             });
             
             socket.on('gameState', (state) => {
                 if (state) {
                     board = state.board;
                     currentPlayer = state.currentPlayer;
+                    isMyTurn = (state.currentPlayer === playerColor);
                     whiteWins = state.whiteWins || 0;
                     blackWins = state.blackWins || 0;
                     document.getElementById('whiteScore').textContent = whiteWins;
@@ -1384,9 +1388,17 @@
             });
             
             socket.on('opponentMove', (moveData) => {
+                console.log('Recebi movimento do oponente. currentPlayer recebido:', moveData.currentPlayer);
+                console.log('Minha cor:', playerColor);
+                
                 board = moveData.board;
                 currentPlayer = moveData.currentPlayer;
-                isMyTurn = true;
+                
+                // É minha vez se o currentPlayer recebido for igual à minha cor
+                isMyTurn = (currentPlayer === playerColor);
+                
+                console.log('isMyTurn após opponentMove:', isMyTurn);
+                
                 createBoard();
                 updateTurnIndicator();
             });
@@ -1403,6 +1415,7 @@
                 currentPlayer = 'white';
                 gameActive = true;
                 moveHistory = [];
+                isMyTurn = (playerColor === 'white');
                 createBoard();
                 updateTurnIndicator();
                 document.getElementById('gameStatus').innerHTML = '';
@@ -1502,9 +1515,17 @@
         }
 
         function handleSquareClick(row, col) {
+            console.log('=== handleSquareClick ===');
+            console.log('gameActive:', gameActive);
+            console.log('gameMode:', gameMode);
+            console.log('isMyTurn:', isMyTurn);
+            console.log('playerColor:', playerColor);
+            console.log('currentPlayer:', currentPlayer);
+            
             if (!gameActive) return;
             
             if (gameMode === 'online' && !isMyTurn) {
+                console.log('BLOQUEADO: não é sua vez (isMyTurn=false)');
                 return;
             }
             
@@ -1512,7 +1533,10 @@
                 audioCtx.resume();
             }
             
-            if (gameMode === 'online' && currentPlayer !== playerColor) return;
+            if (gameMode === 'online' && currentPlayer !== playerColor) {
+                console.log('BLOQUEADO: currentPlayer !== playerColor');
+                return;
+            }
 
             if (selectedSquare) {
                 const [selectedRow, selectedCol] = selectedSquare;
@@ -2922,6 +2946,11 @@ function selectSquare(row, col) {
                 black: { kingSide: true, queenSide: true }
             };
             enPassantTarget = null;
+            
+            // Reset isMyTurn no modo online
+            if (gameMode === 'online') {
+                isMyTurn = (playerColor === 'white');
+            }
             
             const modal = document.getElementById('victoryModal');
             if (modal) modal.classList.remove('show');
