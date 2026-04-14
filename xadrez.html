@@ -938,16 +938,22 @@
                 <div class="game-header">
                     <h1>Xadrez Online</h1>
                 </div>
-                
-                <div class="mode-selector" id="modeSelector">
-                    <button class="mode-btn active" onclick="setGameMode('local')">♟ Local</button>
-                    <button class="mode-btn" onclick="setGameMode('online')">🌐 Online</button>
+
+                <!-- BUG FIX #8: Added missing #turnIndicator element referenced by updateTurnIndicator() -->
+                <div class="info-panel">
+                    <div id="turnIndicator" class="turn-indicator turn-white">Vez das Brancas</div>
                 </div>
                 
-                <div class="difficulty-selector" id="difficultySelector" style="display: none; gap: 8px;">
-                    <button class="diff-btn active" onclick="setDifficulty('easy')">Fácil</button>
-                    <button class="diff-btn" onclick="setDifficulty('medium')">Médio</button>
-                    <button class="diff-btn" onclick="setDifficulty('hard')">Difícil</button>
+                <div class="mode-selector" id="modeSelector">
+                    <!-- BUG FIX #5: Pass event explicitly via onclick to avoid relying on global `event` -->
+                    <button class="mode-btn active" onclick="setGameMode('local', event)">♟ Local</button>
+                    <button class="mode-btn" onclick="setGameMode('online', event)">🌐 Online</button>
+                </div>
+                
+                <div class="difficulty-selector" id="difficultySelector" style="display: flex; gap: 8px;">
+                    <button class="diff-btn active" onclick="setDifficulty('easy', event)">Fácil</button>
+                    <button class="diff-btn" onclick="setDifficulty('medium', event)">Médio</button>
+                    <button class="diff-btn" onclick="setDifficulty('hard', event)">Difícil</button>
                 </div>
                 
                 <div class="room-input" id="roomInput" style="display: none;">
@@ -962,7 +968,7 @@
                 
                 <div id="gameStatus"></div>
                 
-                <div class="button-row" id="undoButtonRow" style="display: none;">
+                <div class="button-row" id="undoButtonRow" style="display: flex;">
                     <button class="undo-button" onclick="undoMove()">↩ Desfazer</button>
                 </div>
                 
@@ -1089,7 +1095,8 @@
             
             if (audioPlaylist.length === 0) {
                 console.log('No audio files found, using synthesized music');
-                playSynthMusic();
+                // BUG FIX #7: playSynthMusic was referenced but never defined; replaced with no-op fallback
+                bgMusicPlaying = false;
                 return;
             }
             
@@ -1181,7 +1188,7 @@
                 knight: '♘',
                 pawn: '♙'
             }
-};
+        };
         
         const BOARD_SIZE = 8;
         let selectedSquare = null;
@@ -1248,6 +1255,7 @@
             
             gameActive = false;
         }
+
         let gameActive = true;
         let whiteWins = 0;
         let blackWins = 0;
@@ -1284,15 +1292,16 @@
             return b;
         }
 
-        function setGameMode(mode) {
+        // BUG FIX #5: Accept event as explicit parameter instead of relying on implicit global `event`
+        function setGameMode(mode, evt) {
             console.log('setGameMode called:', mode);
             gameMode = mode;
             
-            if (event) {
+            if (evt) {
                 document.querySelectorAll('.mode-btn').forEach(btn => {
                     btn.classList.remove('active');
                 });
-                event.target.classList.add('active');
+                evt.target.classList.add('active');
             }
             
             const roomInput = document.getElementById('roomInput');
@@ -1311,12 +1320,13 @@
             resetGame();
         }
 
-        function setDifficulty(level) {
+        // BUG FIX #5: Accept event as explicit parameter
+        function setDifficulty(level, evt) {
             difficulty = level;
             document.querySelectorAll('.diff-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event.target.classList.add('active');
+            if (evt) evt.target.classList.add('active');
         }
 
         function connectToServer() {
@@ -1324,7 +1334,6 @@
                 socket.disconnect();
             }
             
-            // Conecta ao servidor atual automaticamente (Replit)
             socket = io({
                 transports: ['websocket', 'polling'],
                 reconnection: true,
@@ -1354,11 +1363,6 @@
                 isMyTurn = (color === 'white');
                 createBoard();
                 updateTurnIndicator();
-                console.log('=== Jogador conectado ===');
-                console.log('playerColor:', playerColor);
-                console.log('currentPlayer:', currentPlayer);
-                console.log('isMyTurn:', isMyTurn);
-                console.log('Tabuleiro será criado com flip:', (color === 'black'));
             });
             
             socket.on('gameState', (state) => {
@@ -1393,14 +1397,13 @@
                 
                 board = moveData.board;
                 currentPlayer = moveData.currentPlayer;
-                
-                // É minha vez se o currentPlayer recebido for igual à minha cor
                 isMyTurn = (currentPlayer === playerColor);
                 
                 console.log('isMyTurn após opponentMove:', isMyTurn);
                 
                 createBoard();
                 updateTurnIndicator();
+                checkGameStatus();
             });
             
             socket.on('scoreUpdate', (scoreData) => {
@@ -1479,22 +1482,30 @@
                 console.error('Chessboard element not found');
                 return;
             }
-            console.log('Creating board - playerColor:', playerColor, 'currentPlayer:', currentPlayer);
             chessboard.innerHTML = '';
 
-            const shouldFlip = (gameMode === 'online' && playerColor === 'black');
-            console.log('Tabuleiro será flipado:', shouldFlip);
-            
-            if (shouldFlip) {
-                chessboard.classList.add('flipped');
-            } else {
-                chessboard.classList.remove('flipped');
-            }
+            // Always remove the CSS-rotate class — we handle perspective by reversing
+            // the render order in JS instead. CSS rotate(180deg) flips the Unicode
+            // chess glyphs upside-down and inverts click coordinates.
+            chessboard.classList.remove('flipped');
 
-            for (let row = 0; row < BOARD_SIZE; row++) {
-                for (let col = 0; col < BOARD_SIZE; col++) {
+            const shouldFlip = (gameMode === 'online' && playerColor === 'black');
+
+            // Build the visual row/col order: black player sees row 0 at the bottom
+            const rowOrder = shouldFlip
+                ? Array.from({length: BOARD_SIZE}, (_, i) => BOARD_SIZE - 1 - i)  // 7→0
+                : Array.from({length: BOARD_SIZE}, (_, i) => i);                   // 0→7
+
+            const colOrder = shouldFlip
+                ? Array.from({length: BOARD_SIZE}, (_, i) => BOARD_SIZE - 1 - i)  // 7→0
+                : Array.from({length: BOARD_SIZE}, (_, i) => i);                   // 0→7
+
+            for (const row of rowOrder) {
+                for (const col of colOrder) {
                     const square = document.createElement('div');
                     square.className = 'square';
+                    // data-row/col always hold real board coordinates so click handlers
+                    // and querySelector selectors work correctly regardless of perspective
                     square.dataset.row = row;
                     square.dataset.col = col;
 
@@ -1518,13 +1529,6 @@
         }
 
         function handleSquareClick(row, col) {
-            console.log('=== handleSquareClick ===');
-            console.log('gameActive:', gameActive);
-            console.log('gameMode:', gameMode);
-            console.log('isMyTurn:', isMyTurn);
-            console.log('playerColor:', playerColor);
-            console.log('currentPlayer:', currentPlayer);
-            
             if (!gameActive) return;
             
             if (gameMode === 'online' && !isMyTurn) {
@@ -1534,11 +1538,6 @@
             
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
-            }
-            
-            if (gameMode === 'online' && currentPlayer !== playerColor) {
-                console.log('BLOQUEADO: currentPlayer !== playerColor');
-                return;
             }
 
             if (selectedSquare) {
@@ -1556,23 +1555,13 @@
                     return;
                 }
 
-                const possibleMoves = getPossibleMoves(selectedRow, selectedCol);
-                console.log('possibleMoves from', selectedRow, selectedCol, ':', possibleMoves);
-                console.log('Trying to move to:', row, col);
-                console.log('Match?', possibleMoves.some(move => move[0] === row && move[1] === col));
+                // BUG FIX #1 & #6: Use getLegalMoves (which filters check) instead of getPossibleMoves
+                const possibleMoves = getLegalMoves(selectedRow, selectedCol);
 
                 if (possibleMoves.some(move => move[0] === row && move[1] === col)) {
                     movePiece(selectedRow, selectedCol, row, col);
                     clearSelection();
-                    
-                    if (gameMode === 'online' && socket) {
-                        const nextPlayer = currentPlayer === 'white' ? 'black' : 'white';
-                        console.log('Emitting move, currentPlayer (who moved):', currentPlayer, '-> nextPlayer:', nextPlayer);
-                        socket.emit('makeMove', {
-                            board: board,
-                            currentPlayer: nextPlayer
-                        });
-                    }
+                    // BUG FIX #4: Removed duplicate socket.emit here; movePiece handles online emission
                 } else {
                     clearSelection();
                     selectSquare(row, col);
@@ -1582,37 +1571,24 @@
             }
         }
 
-function selectSquare(row, col) {
-            console.log('=== selectSquare called ===');
-            console.log('row:', row, 'col:', col);
-            
+        function selectSquare(row, col) {
             clearSelection();
 
             const piece = board[row][col];
-            console.log('Piece at position:', piece);
             
-            if (!piece) {
-                console.log('NO PIECE at this position');
-                return;
-            }
+            if (!piece) return;
             
-            console.log('Piece color:', piece.color, 'Current player:', currentPlayer);
-            
-            if (piece.color !== currentPlayer) {
-                console.log('WRONG COLOR - cannot select');
-                return;
-            }
+            if (piece.color !== currentPlayer) return;
 
             selectedSquare = [row, col];
             const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
             if (square) {
                 square.classList.add('selected');
-                const piece = board[row][col];
-                if (piece) playSound(piece.type);
+                playSound(piece.type);
             }
 
-            const possibleMoves = getPossibleMoves(row, col);
-            console.log('Possible moves:', possibleMoves);
+            // BUG FIX #1 & #6: Show only legal moves (filtered for check) on the board
+            const possibleMoves = getLegalMoves(row, col);
             possibleMoves.forEach(([moveRow, moveCol]) => {
                 const moveSquare = document.querySelector(`[data-row="${moveRow}"][data-col="${moveCol}"]`);
                 if (moveSquare) moveSquare.classList.add('possible-move');
@@ -1820,7 +1796,7 @@ function selectSquare(row, col) {
                     const piece = board[r][c];
                     if (piece && piece.color === byColor) {
                         let moves = [];
-                        switch(piece.type) {
+                        switch (piece.type) {
                             case 'pawn':
                                 const dir = piece.color === 'white' ? -1 : 1;
                                 if (r + dir >= 0 && r + dir < BOARD_SIZE) {
@@ -1900,34 +1876,35 @@ function selectSquare(row, col) {
                 playSound(piece.type);
             }
 
-            createBoard();
-            
+            // Switch player first, then emit
+            const nextPlayer = playerWhoMoved === 'white' ? 'black' : 'white';
+            currentPlayer = nextPlayer;
+
             if (gameMode === 'online' && socket) {
-                const nextPlayer = playerWhoMoved === 'white' ? 'black' : 'white';
-                console.log('Emitting move, currentPlayer (moved):', playerWhoMoved, 'next:', nextPlayer);
+                // BUG FIX #4: isMyTurn BEFORE emit to prevent race condition
+                isMyTurn = false;
+                currentPlayer = nextPlayer;
+                console.log('Emitting move, movedBy:', playerWhoMoved, 'next:', nextPlayer);
                 socket.emit('makeMove', {
                     board: board,
                     currentPlayer: nextPlayer
                 });
-                
-                isMyTurn = false;
-                currentPlayer = nextPlayer;
+                createBoard();
                 updateTurnIndicator();
                 checkGameStatus();
             } else {
+                createBoard();
+                // BUG FIX #2: switchPlayer handles local mode; AI is triggered only in local mode
                 switchPlayer();
             }
         }
 
         function switchPlayer() {
-            currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+            // currentPlayer already updated in movePiece before this call
             updateTurnIndicator();
             
-            if (gameMode === 'online') {
-                isMyTurn = !isMyTurn;
-            }
-            
-            if (gameMode === 'local' && gameActive) {
+            // BUG FIX #2: Only trigger AI in local mode when it's black's turn
+            if (gameMode === 'local' && currentPlayer === 'black' && gameActive) {
                 setTimeout(() => makeAIMove(), 500);
             }
             
@@ -2256,11 +2233,8 @@ function selectSquare(row, col) {
             }
             
             score += (attackUnits[color] - attackUnits[opponent]) * 8;
-            
             score += pieceActivity[color] - pieceActivity[opponent];
-            
             score += evaluatePawnStructure(b, color) - evaluatePawnStructure(b, opponent);
-            
             score += evaluateSpace(b, color) - evaluateSpace(b, opponent);
             
             const myPieces = pieceCount[color];
@@ -2354,9 +2328,6 @@ function selectSquare(row, col) {
             if (b[startRow][5] && b[startRow][5].type === 'bishop') score += 1;
             if (b[startRow][6] && b[startRow][6].type === 'knight') score += 1;
             
-            if (b[startRow + (color === 'white' ? -1 : 1)][4] && b[startRow + (color === 'white' ? -1 : 1)][4].type === 'king') {
-            }
-            
             return score;
         }
 
@@ -2364,7 +2335,6 @@ function selectSquare(row, col) {
             let score = 0;
             for (let col = 0; col < BOARD_SIZE; col++) {
                 let pawnCount = { white: 0, black: 0 };
-                let doubledPawns = { white: false, black: false };
                 
                 for (let row = 0; row < BOARD_SIZE; row++) {
                     if (b[row][col] && b[row][col].type === 'pawn') {
@@ -2590,9 +2560,6 @@ function selectSquare(row, col) {
                 return 0;
             }
             
-            const originalAlpha = alpha;
-            const originalBeta = beta;
-            
             if (depth === 0) {
                 return evaluateBoard(b, color);
             }
@@ -2679,7 +2646,8 @@ function selectSquare(row, col) {
 
         function makeAIMove() {
             console.log('makeAIMove called - gameActive:', gameActive, 'currentPlayer:', currentPlayer, 'difficulty:', difficulty);
-            if (!gameActive || currentPlayer === 'white') return;
+            // BUG FIX #2: Guard against wrong turn; AI only plays as black in local mode
+            if (!gameActive || currentPlayer !== 'black' || gameMode !== 'local') return;
             
             let depth;
             if (difficulty === 'easy') {
@@ -2691,8 +2659,6 @@ function selectSquare(row, col) {
             }
             
             const startTime = Date.now();
-            
-            console.log('Finding best move with depth:', depth);
             const bestMove = findBestMove('black', depth);
             const elapsed = Date.now() - startTime;
             console.log(`Difficulty: ${difficulty}, Depth: ${depth}, Time: ${elapsed}ms, BestMove:`, bestMove);
@@ -2700,10 +2666,7 @@ function selectSquare(row, col) {
             if (bestMove) {
                 const [fromRow, fromCol] = bestMove.from;
                 const [toRow, toCol] = bestMove.to;
-                console.log('Moving from', fromRow, fromCol, 'to', toRow, toCol);
                 movePiece(fromRow, fromCol, toRow, toCol);
-            } else {
-                console.log('No best move found!');
             }
         }
 
@@ -2711,21 +2674,24 @@ function selectSquare(row, col) {
             if (moveHistory.length === 0 || !gameActive) return;
             
             const lastMove = moveHistory.pop();
-            
             const [fromRow, fromCol] = lastMove.from;
             const [toRow, toCol] = lastMove.to;
             board[fromRow][fromCol] = lastMove.piece;
             board[toRow][toCol] = lastMove.capturedPiece;
             
-            if (gameMode === 'online' && moveHistory.length > 0) {
+            // BUG FIX #3: In local mode (vs AI) undo both the player's move and the AI's move.
+            // Previously the condition was `gameMode === 'online'` which is inverted.
+            if (gameMode === 'local' && moveHistory.length > 0) {
                 const secondLastMove = moveHistory.pop();
                 const [aiFromRow, aiFromCol] = secondLastMove.from;
                 const [aiToRow, aiToCol] = secondLastMove.to;
                 board[aiFromRow][aiFromCol] = secondLastMove.piece;
                 board[aiToRow][aiToCol] = secondLastMove.capturedPiece;
+                currentPlayer = secondLastMove.previousPlayer;
+            } else {
+                currentPlayer = lastMove.previousPlayer;
             }
-            
-            currentPlayer = lastMove.previousPlayer;
+
             gameActive = true;
             document.getElementById('gameStatus').innerHTML = '';
             
@@ -2773,57 +2739,13 @@ function selectSquare(row, col) {
             return null;
         }
 
-        function isSquareAttackedByColor(row, col, attackerColor) {
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                for (let c = 0; c < BOARD_SIZE; c++) {
-                    const piece = board[r][c];
-                    if (piece && piece.color === attackerColor) {
-                        let moves = [];
-                        switch(piece.type) {
-                            case 'pawn':
-                                const dir = piece.color === 'white' ? -1 : 1;
-                                if (r + dir === row && (c - 1 === col || c + 1 === col)) {
-                                    return true;
-                                }
-                                break;
-                            case 'knight':
-                                moves = getKnightMoves(r, c, piece.color);
-                                break;
-                            case 'bishop':
-                                moves = getBishopMoves(r, c, piece.color);
-                                break;
-                            case 'rook':
-                                moves = getRookMoves(r, c, piece.color);
-                                break;
-                            case 'queen':
-                                moves = getQueenMoves(r, c, piece.color);
-                                break;
-                            case 'king':
-                                moves = getKingMoves(r, c, piece.color);
-                                break;
-                        }
-                        if (moves.some(m => m[0] === row && m[1] === col)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
-        }
-
         function wouldLeaveKingInCheck(fromRow, fromCol, toRow, toCol, color) {
             const tempBoard = board.map(r => r.map(c => c ? {...c} : null));
             
-            board[toRow][toCol] = board[fromRow][fromCol];
-            board[fromRow][fromCol] = null;
+            tempBoard[toRow][toCol] = tempBoard[fromRow][fromCol];
+            tempBoard[fromRow][fromCol] = null;
             
-            const inCheck = isKingInCheck(color);
-            
-            board.forEach((r, ri) => r.forEach((c, ci) => {
-                board[ri][ci] = tempBoard[ri][ci];
-            }));
-            
-            return inCheck;
+            return isKingInCheckRaw(tempBoard, color);
         }
 
         function isValidMove(fromRow, fromCol, toRow, toCol) {
@@ -2848,8 +2770,6 @@ function selectSquare(row, col) {
 
         function isKingInCheck(color) {
             const kingPos = findKing(color);
-            console.log('isKingInCheck - finding king for', color, 'at', kingPos);
-            
             if (!kingPos) return false;
             const [kingRow, kingCol] = kingPos;
             const opponentColor = color === 'white' ? 'black' : 'white';
@@ -2874,7 +2794,6 @@ function selectSquare(row, col) {
                             case 'king': moves = getKingMoves(row, col, piece.color); break;
                         }
                         if (moves.some(m => m[0] === kingRow && m[1] === kingCol)) {
-                            console.log('King in check by', piece.type, 'at', row, col);
                             return true;
                         }
                     }
@@ -2884,25 +2803,19 @@ function selectSquare(row, col) {
         }
 
         function checkGameStatus() {
-            console.log('checkGameStatus called - currentPlayer:', currentPlayer, 'gameActive:', gameActive);
-            
             const statusDiv = document.getElementById('gameStatus');
             const allMoves = [];
             const inCheck = isKingInCheck(currentPlayer);
-            console.log('inCheck:', inCheck);
 
             for (let row = 0; row < BOARD_SIZE; row++) {
                 for (let col = 0; col < BOARD_SIZE; col++) {
                     const piece = board[row][col];
                     if (piece && piece.color === currentPlayer) {
                         const moves = getLegalMoves(row, col);
-                        console.log('Piece at', row, col, piece.type, 'legal moves:', moves.length);
                         allMoves.push(...moves);
                     }
                 }
             }
-            
-            console.log('Total legal moves:', allMoves.length);
 
             if (allMoves.length === 0) {
                 const winner = currentPlayer === 'white' ? 'Pretas' : 'Brancas';
@@ -2966,7 +2879,6 @@ function selectSquare(row, col) {
             };
             enPassantTarget = null;
             
-            // Reset isMyTurn no modo online
             if (gameMode === 'online') {
                 isMyTurn = (playerColor === 'white');
             }
