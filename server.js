@@ -35,6 +35,119 @@ mercadopago.MercadoPago = mercadopago;
 app.use(cors());
 app.use(express.json());
 
+// ===== FUNÇÕES AUXILIARES (ANTES DAS ROTAS) =====
+
+// Função para ler usuários do arquivo
+function loadUsers() {
+    try {
+        const data = fs.readFileSync(usersFilePath, 'utf-8');
+        return JSON.parse(data).users;
+    } catch (err) {
+        return [];
+    }
+}
+
+// Função para salvar usuários no arquivo
+function saveUsers(users) {
+    fs.writeFileSync(usersFilePath, JSON.stringify({ users }, null, 2));
+}
+
+// Função para ler pagamentos do arquivo
+function loadPayments() {
+    try {
+        const data = fs.readFileSync(paymentsFilePath, 'utf-8');
+        return JSON.parse(data).payments || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+// Função para salvar pagamentos no arquivo
+function savePayments(payments) {
+    fs.writeFileSync(paymentsFilePath, JSON.stringify({ payments }, null, 2));
+}
+
+// Função para registrar um pagamento
+function recordPayment(paymentData) {
+    const payments = loadPayments();
+    const newPayment = {
+        id: paymentData.preferenceId,
+        userId: paymentData.userId,
+        username: paymentData.username,
+        tournamentId: paymentData.tournamentId,
+        amount: paymentData.amount,
+        houseFee: paymentData.houseFee,
+        playerAmount: paymentData.playerAmount,
+        status: paymentData.status || 'pending',
+        paymentMethod: paymentData.paymentMethod || 'unknown',
+        createdAt: new Date().toISOString(),
+        confirmedAt: null,
+        mercadoPagoId: null
+    };
+    
+    payments.push(newPayment);
+    savePayments(payments);
+    
+    console.log(`[REGISTRO] Novo pagamento registrado: ID: ${newPayment.id} | Usuário: ${newPayment.username} | Método: ${newPayment.paymentMethod.toUpperCase()} | Valor: R$ ${newPayment.amount} | Banca: R$ ${newPayment.houseFee} | Jogadores: R$ ${newPayment.playerAmount}`);
+}
+
+// ===== GERENCIAMENTO DE TORNEIOS =====
+
+function loadTournaments() {
+    try {
+        const data = fs.readFileSync(tournamentsFilePath, 'utf-8');
+        return JSON.parse(data).tournaments || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveTournaments(tournaments) {
+    fs.writeFileSync(tournamentsFilePath, JSON.stringify({ tournaments }, null, 2));
+}
+
+function loadTournamentParticipants(tournamentId) {
+    try {
+        const data = fs.readFileSync(tournamentsFilePath, 'utf-8');
+        const tournaments = JSON.parse(data).tournaments || [];
+        const tournament = tournaments.find(t => t.id === tournamentId);
+        return tournament ? tournament.participants : [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function addParticipantToTournament(tournamentId, userId, username) {
+    const tournaments = loadTournaments();
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    
+    if (tournament) {
+        if (!tournament.participants) {
+            tournament.participants = [];
+        }
+        if (!tournament.participants.find(p => p.userId === userId)) {
+            tournament.participants.push({
+                userId,
+                username,
+                joinedAt: new Date().toISOString(),
+                status: 'paid'
+            });
+            saveTournaments(tournaments);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Middleware para verificar token JWT
+function verifyToken(token) {
+    try {
+        return jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+        return null;
+    }
+}
+
 // ===== ROTAS DE API =====
 // Essas rotas precisam vir ANTES de app.use(express.static)
 // para que /api/* seja processado como rota, não como arquivo estático
@@ -648,119 +761,6 @@ app.post('/api/login', async (req, res) => {
 
 // Arquivo estático deve vir DEPOIS das rotas de API
 app.use(express.static(rootDir));
-
-// ===== FUNÇÕES AUXILIARES =====
-
-// Função para ler usuários do arquivo
-function loadUsers() {
-    try {
-        const data = fs.readFileSync(usersFilePath, 'utf-8');
-        return JSON.parse(data).users;
-    } catch (err) {
-        return [];
-    }
-}
-
-// Função para salvar usuários no arquivo
-function saveUsers(users) {
-    fs.writeFileSync(usersFilePath, JSON.stringify({ users }, null, 2));
-}
-
-// Função para ler pagamentos do arquivo
-function loadPayments() {
-    try {
-        const data = fs.readFileSync(paymentsFilePath, 'utf-8');
-        return JSON.parse(data).payments || [];
-    } catch (err) {
-        return [];
-    }
-}
-
-// Função para salvar pagamentos no arquivo
-function savePayments(payments) {
-    fs.writeFileSync(paymentsFilePath, JSON.stringify({ payments }, null, 2));
-}
-
-// Função para registrar um pagamento
-function recordPayment(paymentData) {
-    const payments = loadPayments();
-    const newPayment = {
-        id: paymentData.preferenceId,
-        userId: paymentData.userId,
-        username: paymentData.username,
-        tournamentId: paymentData.tournamentId,
-        amount: paymentData.amount,
-        houseFee: paymentData.houseFee,
-        playerAmount: paymentData.playerAmount,
-        status: paymentData.status || 'pending',
-        paymentMethod: paymentData.paymentMethod || 'unknown',
-        createdAt: new Date().toISOString(),
-        confirmedAt: null,
-        mercadoPagoId: null
-    };
-    
-    payments.push(newPayment);
-    savePayments(payments);
-    
-    console.log(`[REGISTRO] Novo pagamento registrado: ID: ${newPayment.id} | Usuário: ${newPayment.username} | Método: ${newPayment.paymentMethod.toUpperCase()} | Valor: R$ ${newPayment.amount} | Banca: R$ ${newPayment.houseFee} | Jogadores: R$ ${newPayment.playerAmount}`);
-}
-
-// ===== GERENCIAMENTO DE TORNEIOS =====
-
-function loadTournaments() {
-    try {
-        const data = fs.readFileSync(tournamentsFilePath, 'utf-8');
-        return JSON.parse(data).tournaments || [];
-    } catch (err) {
-        return [];
-    }
-}
-
-function saveTournaments(tournaments) {
-    fs.writeFileSync(tournamentsFilePath, JSON.stringify({ tournaments }, null, 2));
-}
-
-function loadTournamentParticipants(tournamentId) {
-    try {
-        const data = fs.readFileSync(tournamentsFilePath, 'utf-8');
-        const tournaments = JSON.parse(data).tournaments || [];
-        const tournament = tournaments.find(t => t.id === tournamentId);
-        return tournament ? tournament.participants : [];
-    } catch (err) {
-        return [];
-    }
-}
-
-function addParticipantToTournament(tournamentId, userId, username) {
-    const tournaments = loadTournaments();
-    const tournament = tournaments.find(t => t.id === tournamentId);
-    
-    if (tournament) {
-        if (!tournament.participants) {
-            tournament.participants = [];
-        }
-        if (!tournament.participants.find(p => p.userId === userId)) {
-            tournament.participants.push({
-                userId,
-                username,
-                joinedAt: new Date().toISOString(),
-                status: 'paid'
-            });
-            saveTournaments(tournaments);
-            return true;
-        }
-    }
-    return false;
-}
-
-// Middleware para verificar token JWT
-function verifyToken(token) {
-    try {
-        return jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-        return null;
-    }
-}
 
 app.get('/', (req, res) => {
     res.sendFile(htmlPath);
