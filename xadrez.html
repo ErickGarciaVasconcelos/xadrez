@@ -2148,13 +2148,26 @@
             errorDiv.style.display = 'block';
         }
 
-        function logout() {
-            authToken = null;
-            currentUser = null;
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('currentUser');
-            showAuthScreen();
-        }
+         function logout() {
+             authToken = null;
+             currentUser = null;
+             
+             // Desconecta do socket e limpa a sessão de jogo
+             if (socket) {
+                 socket.disconnect();
+                 socket = null;
+             }
+             
+             // Remove APENAS autenticação, mas preserva a sessão de jogo se desejar
+             localStorage.removeItem('authToken');
+             localStorage.removeItem('currentUser');
+             localStorage.removeItem('gameSession');
+             localStorage.removeItem('gameRoomId');
+             localStorage.removeItem('playerColor');
+             localStorage.removeItem('gameMode');
+             
+             showAuthScreen();
+         }
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -2673,9 +2686,20 @@
                 updateConnectionStatus('desconectado', 'Servidor offline. Use modo local.');
             });
             
-            socket.on('disconnect', () => {
-                updateConnectionStatus('desconectado');
-            });
+             socket.on('disconnect', () => {
+                 updateConnectionStatus('desconectado', 'Desconectado do servidor. Tentando reconectar...');
+                 // Preserva a sessão de jogo para reconexão automática
+             });
+             
+             socket.on('reconnect', () => {
+                 console.log('Reconectado ao servidor! Rejoinando sala...');
+                 // Verifica se há uma sessão de jogo ativa para rejoin
+                 const savedRoomId = localStorage.getItem('gameRoomId');
+                 if (savedRoomId && authToken) {
+                     socket.emit('joinRoom', savedRoomId, authToken);
+                     updateConnectionStatus('conectado', 'Reconectado! Aguardando oponente...');
+                 }
+             });
             
             socket.on('authError', (error) => {
                 console.error('Erro de autenticação:', error);
@@ -2683,21 +2707,25 @@
                 logout();
             });
             
-            socket.on('playerColor', (playerInfo) => {
-                console.log('Received playerInfo:', playerInfo);
-                // Verifica se é o novo formato com username
-                if (typeof playerInfo === 'string') {
-                    // Formato antigo compatível
-                    playerColor = playerInfo;
-                } else {
-                    // Novo formato com objeto {color, username}
-                    playerColor = playerInfo.color;
-                }
-                currentPlayer = 'white';
-                isMyTurn = (playerColor === 'white');
-                createBoard();
-                // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
-            });
+             socket.on('playerColor', (playerInfo) => {
+                 console.log('Received playerInfo:', playerInfo);
+                 // Verifica se é o novo formato com username
+                 if (typeof playerInfo === 'string') {
+                     // Formato antigo compatível
+                     playerColor = playerInfo;
+                 } else {
+                     // Novo formato com objeto {color, username}
+                     playerColor = playerInfo.color;
+                 }
+                 
+                 // Salva a cor do jogador no localStorage para recuperação após reload
+                 localStorage.setItem('playerColor', playerColor);
+                 
+                 currentPlayer = 'white';
+                 isMyTurn = (playerColor === 'white');
+                 createBoard();
+                 // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
+             });
             
             socket.on('gameState', (state) => {
                 if (state) {
@@ -2763,10 +2791,11 @@
                 document.getElementById('gameStatus').innerHTML = '';
             });
             
-            socket.on('opponentDisconnected', () => {
-                updateConnectionStatus('desconectado', 'Oponente desconectou!');
-                isMyTurn = false;
-            });
+             socket.on('opponentDisconnected', () => {
+                 updateConnectionStatus('desconectado', 'Oponente desconectou! Sessão preservada');
+                 isMyTurn = false;
+                 // NÃO limpa a sessão de jogo - permite reconexão
+             });
             
             socket.on('roomFull', () => {
                 alert('Sala cheia!');
@@ -2774,42 +2803,48 @@
             });
         }
 
-        function joinRoom() {
-            console.log('joinRoom called');
-            
-            // Verifica se o usuário está autenticado
-            if (!authToken || !currentUser) {
-                alert('Você precisa fazer login primeiro');
-                logout();
-                return;
-            }
+         function joinRoom() {
+             console.log('joinRoom called');
+             
+             // Verifica se o usuário está autenticado
+             if (!authToken || !currentUser) {
+                 alert('Você precisa fazer login primeiro');
+                 logout();
+                 return;
+             }
 
-            const roomInput = document.getElementById('roomIdInput');
-            if (!roomInput) {
-                console.error('roomIdInput not found');
-                return;
-            }
-            const room = roomInput.value.trim().toUpperCase();
-            if (!room) {
-                alert('Digite o ID da sala');
-                return;
-            }
-            
-            if (!socket) {
-                console.log('Connecting to server...');
-                connectToServer();
-            }
-            
-            setTimeout(() => {
-                if (socket) {
-                    roomId = room;
-                    // Agora envia o token junto com o roomId
-                    socket.emit('joinRoom', room, authToken);
-                    console.log('Emitted joinRoom:', room);
-                    updateConnectionStatus('conectado', 'Aguardando oponente...');
-                }
-            }, 500);
-        }
+             const roomInput = document.getElementById('roomIdInput');
+             if (!roomInput) {
+                 console.error('roomIdInput not found');
+                 return;
+             }
+             const room = roomInput.value.trim().toUpperCase();
+             if (!room) {
+                 alert('Digite o ID da sala');
+                 return;
+             }
+             
+             if (!socket) {
+                 console.log('Connecting to server...');
+                 connectToServer();
+             }
+             
+             setTimeout(() => {
+                 if (socket) {
+                     roomId = room;
+                     
+                     // Salva a sessão de jogo no localStorage
+                     localStorage.setItem('gameRoomId', room);
+                     localStorage.setItem('gameMode', 'online');
+                     localStorage.setItem('gameSession', 'active');
+                     
+                     // Agora envia o token junto com o roomId
+                     socket.emit('joinRoom', room, authToken);
+                     console.log('Emitted joinRoom:', room);
+                     updateConnectionStatus('conectado', 'Aguardando oponente...');
+                 }
+             }, 500);
+         }
 
         function updateConnectionStatus(status, message) {
             const statusDiv = document.getElementById('connectionStatus');
@@ -2824,17 +2859,56 @@
                                    status === 'esperando' ? 'Aguardando oponente...' : 'Aguardando...');
         }
 
-        function initializeGame() {
-            // Inicializa o jogo após autenticação
-            console.log(`Jogador ${currentUser.username} autenticado`);
-            
-            // Atualiza a exibição do perfil do jogador
-            updateUserProfile();
-            
-            // Reinicia o tabuleiro e estado do jogo
-            createBoard();
-            resetGame();
-        }
+         function initializeGame() {
+             // Inicializa o jogo após autenticação
+             console.log(`Jogador ${currentUser.username} autenticado`);
+             
+             // Atualiza a exibição do perfil do jogador
+             updateUserProfile();
+             
+             // Verifica se há uma sessão de jogo ativa que precisa ser restaurada
+             const gameSession = localStorage.getItem('gameSession');
+             const savedRoomId = localStorage.getItem('gameRoomId');
+             const savedPlayerColor = localStorage.getItem('playerColor');
+             const savedGameMode = localStorage.getItem('gameMode');
+             
+             if (gameSession === 'active' && savedRoomId && savedGameMode === 'online') {
+                 console.log('Restaurando sessão de jogo...', savedRoomId);
+                 gameMode = 'online';
+                 roomId = savedRoomId;
+                 playerColor = savedPlayerColor || 'white';
+                 
+                 // Atualiza a UI para modo online
+                 const modeButtons = document.querySelectorAll('.mode-btn');
+                 modeButtons.forEach((btn, idx) => {
+                     btn.classList.remove('active');
+                     if (idx === 1) btn.classList.add('active'); // Online button
+                 });
+                 
+                 const roomInput = document.getElementById('roomInput');
+                 if (roomInput) {
+                     roomInput.style.display = 'flex';
+                     const roomIdInput = document.getElementById('roomIdInput');
+                     if (roomIdInput) {
+                         roomIdInput.value = savedRoomId;
+                     }
+                 }
+                 
+                 // Conecta e rejoin automaticamente
+                 connectToServer();
+                 setTimeout(() => {
+                     if (socket) {
+                         socket.emit('joinRoom', savedRoomId, authToken);
+                         console.log('Rejoinando sala:', savedRoomId);
+                         updateConnectionStatus('conectado', 'Reconectando à partida...');
+                     }
+                 }, 1000);
+             } else {
+                 // Reinicia o tabuleiro e estado do jogo normalmente
+                 createBoard();
+                 resetGame();
+             }
+         }
 
         function updateUserProfile() {
             if (!currentUser) return;
@@ -4342,33 +4416,56 @@
             }
         }
 
-        function resetGame() {
-            board = createInitialBoard();
-            currentPlayer = 'white';
-            gameActive = true;
-            selectedSquare = null;
-            moveHistory = [];
-            castlingRights = {
-                white: { kingSide: true, queenSide: true },
-                black: { kingSide: true, queenSide: true }
-            };
-            enPassantTarget = null;
-            
-            if (gameMode === 'online') {
-                isMyTurn = (playerColor === 'white');
-            }
-            
-            const modal = document.getElementById('victoryModal');
-            if (modal) modal.classList.remove('show');
-            
-            createBoard();
-            updateTurnIndicator();
-            document.getElementById('gameStatus').innerHTML = '';
-            
-            if (gameMode === 'online' && socket) {
-                socket.emit('resetGame');
-            }
-        }
+         function resetGame() {
+             board = createInitialBoard();
+             currentPlayer = 'white';
+             gameActive = true;
+             selectedSquare = null;
+             moveHistory = [];
+             castlingRights = {
+                 white: { kingSide: true, queenSide: true },
+                 black: { kingSide: true, queenSide: true }
+             };
+             enPassantTarget = null;
+             
+             if (gameMode === 'online') {
+                 isMyTurn = (playerColor === 'white');
+             }
+             
+             const modal = document.getElementById('victoryModal');
+             if (modal) modal.classList.remove('show');
+             
+             createBoard();
+             updateTurnIndicator();
+             document.getElementById('gameStatus').innerHTML = '';
+             
+             // Se está em modo online e clicou "Novo Jogo", desconecta da partida
+             if (gameMode === 'online' && socket) {
+                 // Verifica se o botão clicado foi "Novo Jogo"
+                 const modeButtons = document.querySelectorAll('.mode-btn');
+                 const isLocalMode = modeButtons[0].classList.contains('active');
+                 
+                 if (isLocalMode) {
+                     // Mudou para local, desconecta
+                     socket.disconnect();
+                     socket = null;
+                     clearGameSession();
+                 } else {
+                     // Continua em online, apenas reseta o jogo
+                     socket.emit('resetGame');
+                 }
+             }
+         }
+         
+         function clearGameSession() {
+             localStorage.removeItem('gameSession');
+             localStorage.removeItem('gameRoomId');
+             localStorage.removeItem('playerColor');
+             localStorage.removeItem('gameMode');
+             roomId = null;
+             playerColor = 'white';
+             console.log('Sessão de jogo limpa');
+         }
 
         function endGameByMaterial(winnerColor) {
             gameActive = false;
