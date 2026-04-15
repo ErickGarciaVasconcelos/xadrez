@@ -1483,9 +1483,292 @@
               display: none;
           }
 
-          .main-container.auth-hidden {
-              display: none;
-          }
+           .main-container.auth-hidden {
+               display: none;
+           }
+
+           /* ====== ESTILOS DE TORNEIOS ====== */
+           .tournaments-modal {
+               position: fixed;
+               top: 0;
+               left: 0;
+               width: 100%;
+               height: 100%;
+               background: rgba(0, 0, 0, 0.7);
+               display: none;
+               justify-content: center;
+               align-items: center;
+               z-index: 2000;
+           }
+
+           .tournaments-modal.active {
+               display: flex;
+           }
+
+           .tournaments-content {
+               background: rgba(255, 255, 255, 0.05);
+               backdrop-filter: blur(20px);
+               border: 2px solid rgba(138, 43, 226, 0.4);
+               border-radius: 20px;
+               padding: 30px;
+               max-width: 600px;
+               width: 90%;
+               max-height: 80vh;
+               overflow-y: auto;
+               box-shadow: 0 0 50px rgba(138, 43, 226, 0.3);
+           }
+
+           .tournaments-header {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               margin-bottom: 25px;
+               border-bottom: 2px solid rgba(0, 255, 255, 0.3);
+               padding-bottom: 15px;
+           }
+
+           .tournaments-header h2 {
+               color: #00ffff;
+               margin: 0;
+               text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+           }
+
+           .close-btn {
+               background: rgba(255, 0, 0, 0.2);
+               border: 1px solid rgba(255, 0, 0, 0.5);
+               color: #ff6666;
+               width: 35px;
+               height: 35px;
+               border-radius: 50%;
+               cursor: pointer;
+               font-size: 1.2em;
+               transition: all 0.3s ease;
+           }
+
+           .close-btn:hover {
+               background: rgba(255, 0, 0, 0.4);
+               box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+           }
+
+           .tournaments-list {
+               display: flex;
+               flex-direction: column;
+               gap: 15px;
+           }
+
+           .tournament-card {
+               background: rgba(0, 255, 255, 0.1);
+               border: 2px solid rgba(0, 255, 255, 0.3);
+               border-radius: 12px;
+               padding: 20px;
+               transition: all 0.3s ease;
+               cursor: pointer;
+           }
+
+           .tournament-card:hover {
+               background: rgba(0, 255, 255, 0.2);
+               box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+               transform: translateY(-2px);
+           }
+
+           .tournament-name {
+               color: #00ffff;
+               font-size: 1.2em;
+               font-weight: bold;
+               margin-bottom: 8px;
+               text-shadow: 0 0 5px rgba(0, 255, 255, 0.3);
+           }
+
+           .tournament-info {
+               display: flex;
+               justify-content: space-between;
+               gap: 15px;
+               margin-bottom: 12px;
+               font-size: 0.9em;
+               color: rgba(255, 255, 255, 0.8);
+           }
+
+           .tournament-info-item {
+               display: flex;
+               align-items: center;
+               gap: 5px;
+           }
+
+           .join-tournament-btn {
+               width: 100%;
+               background: linear-gradient(135deg, #00ffff 0%, #8800ff 100%);
+               color: #000;
+               border: none;
+               padding: 10px;
+               border-radius: 8px;
+               font-weight: bold;
+               cursor: pointer;
+               transition: all 0.3s ease;
+               text-transform: uppercase;
+               letter-spacing: 1px;
+           }
+
+           .join-tournament-btn:hover {
+               box-shadow: 0 0 20px rgba(0, 255, 255, 0.4);
+               transform: translateY(-2px);
+           }
+
+           .join-tournament-btn:disabled {
+               background: rgba(100, 100, 100, 0.5);
+               cursor: not-allowed;
+               opacity: 0.6;
+           }
+
+           .loading {
+               color: #00ffff;
+               text-align: center;
+               padding: 30px;
+               text-shadow: 0 0 5px rgba(0, 255, 255, 0.3);
+           }
+
+           /* ====== ESTILOS DE PAGAMENTO ====== */
+           .payment-modal {
+               position: fixed;
+               top: 0;
+               left: 0;
+               width: 100%;
+               height: 100%;
+               background: rgba(0, 0, 0, 0.7);
+               display: none;
+               justify-content: center;
+               align-items: center;
+               z-index: 2100;
+           }
+
+           .payment-modal.active {
+               display: flex;
+           }
+
+           .payment-content {
+               background: rgba(255, 255, 255, 0.05);
+               backdrop-filter: blur(20px);
+               border: 2px solid rgba(138, 43, 226, 0.4);
+               border-radius: 20px;
+               padding: 30px;
+               max-width: 500px;
+               width: 90%;
+               box-shadow: 0 0 50px rgba(138, 43, 226, 0.3);
+           }
+
+           .payment-header {
+               display: flex;
+               justify-content: space-between;
+               align-items: center;
+               margin-bottom: 25px;
+               border-bottom: 2px solid rgba(0, 255, 255, 0.3);
+               padding-bottom: 15px;
+           }
+
+           .payment-header h2 {
+               color: #00ffff;
+               margin: 0;
+               text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+           }
+
+           .payment-details {
+               background: rgba(0, 255, 255, 0.1);
+               border: 1px solid rgba(0, 255, 255, 0.3);
+               border-radius: 12px;
+               padding: 20px;
+               margin-bottom: 25px;
+               color: rgba(255, 255, 255, 0.9);
+           }
+
+           .detail-line {
+               display: flex;
+               justify-content: space-between;
+               margin-bottom: 10px;
+               padding-bottom: 10px;
+               border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+           }
+
+           .detail-line:last-child {
+               border-bottom: none;
+               margin-bottom: 0;
+               padding-bottom: 0;
+           }
+
+           .detail-label {
+               color: rgba(255, 255, 255, 0.7);
+           }
+
+           .detail-value {
+               color: #00ffff;
+               font-weight: bold;
+           }
+
+           .payment-methods {
+               display: flex;
+               gap: 15px;
+               justify-content: center;
+           }
+
+            .payment-btn {
+                flex: 1;
+                padding: 20px;
+                border: 2px solid rgba(0, 255, 255, 0.3);
+                border-radius: 12px;
+                background: rgba(0, 255, 255, 0.1);
+                cursor: pointer;
+                transition: all 0.3s ease;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                color: #00ffff;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            .payment-icon {
+                width: 40px;
+                height: 40px;
+            }
+
+            .payment-btn:hover {
+                background: rgba(0, 255, 255, 0.2);
+                box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+                transform: translateY(-2px);
+            }
+
+            .payment-btn:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
+            .payment-btn.selected {
+                background: rgba(0, 255, 255, 0.3);
+                box-shadow: 0 0 30px rgba(0, 255, 255, 0.5), inset 0 0 20px rgba(0, 255, 255, 0.2);
+                transform: scale(1.05);
+            }
+
+            .pix-btn {
+                border-color: rgba(20, 184, 166, 0.5);
+                color: #14b8a6;
+            }
+
+            .pix-btn.selected {
+                border-color: #14b8a6;
+                background: rgba(20, 184, 166, 0.3);
+                box-shadow: 0 0 30px rgba(20, 184, 166, 0.5), inset 0 0 20px rgba(20, 184, 166, 0.2);
+            }
+
+            .card-btn {
+                border-color: rgba(139, 92, 246, 0.5);
+                color: #8b5cf6;
+            }
+
+            .card-btn.selected {
+                border-color: #8b5cf6;
+                background: rgba(139, 92, 246, 0.3);
+                box-shadow: 0 0 30px rgba(139, 92, 246, 0.5), inset 0 0 20px rgba(139, 92, 246, 0.2);
+            }
     </style>
 </head>
 <body>
@@ -1609,6 +1892,10 @@
                     <button class="reset-button" id="bgMusicBtn" onclick="toggleBgMusic()">🔇 Música</button>
                 </div>
                 
+                <div class="button-row">
+                    <button class="reset-button" onclick="showTournaments()">🏆 Torneios</button>
+                </div>
+                
                 <div class="audio-controls" id="audioControls" style="display: none;">
                     <div class="track-info" id="trackInfo">Nenhuma faixa</div>
                     <div class="controls-row">
@@ -1638,6 +1925,42 @@
         </div>
     </div>
 
+    <!-- Modal de Torneios -->
+    <div class="tournaments-modal" id="tournamentsModal">
+        <div class="tournaments-content">
+            <div class="tournaments-header">
+                <h2>🏆 Torneios Disponíveis</h2>
+                <button class="close-btn" onclick="closeTournaments()">✕</button>
+            </div>
+            <div class="tournaments-list" id="tournamentsList">
+                <div class="loading">Carregando torneios...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Pagamento -->
+    <div class="payment-modal" id="paymentModal">
+        <div class="payment-content">
+            <div class="payment-header">
+                <h2>Pagar Entrada do Torneio</h2>
+                <button class="close-btn" onclick="closePayment()">✕</button>
+            </div>
+            <div class="payment-details" id="paymentDetails">
+                <!-- Será preenchido dinamicamente -->
+            </div>
+            <div class="payment-methods">
+                <button class="payment-btn pix-btn" id="pixBtn" onclick="processPIX()">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' font-size='60' fill='%2314b8a6'%3E📱%3C/text%3E%3C/svg%3E" alt="PIX" class="payment-icon">
+                    PIX
+                </button>
+                <button class="payment-btn card-btn" id="cardBtn" onclick="processCard()">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' font-size='60' fill='%238b5cf6'%3E💳%3C/text%3E%3C/svg%3E" alt="Cartão" class="payment-icon">
+                    Cartão
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // ====== AUTENTICAÇÃO ======
         let currentUser = null;
@@ -1653,11 +1976,44 @@
             const savedUser = localStorage.getItem('currentUser');
 
             if (savedToken && savedUser) {
-                authToken = savedToken;
-                currentUser = JSON.parse(savedUser);
-                hideAuthScreen();
+                try {
+                    authToken = savedToken;
+                    currentUser = JSON.parse(savedUser);
+                    // Valida se o token ainda é válido antes de ocultar a tela de login
+                    verifyTokenWithServer(authToken)
+                        .then(isValid => {
+                            if (isValid) {
+                                hideAuthScreen();
+                            } else {
+                                // Token expirado ou inválido
+                                localStorage.removeItem('authToken');
+                                localStorage.removeItem('currentUser');
+                                showAuthScreen();
+                            }
+                        })
+                        .catch(() => {
+                            // Erro ao verificar - mostra a tela de login por segurança
+                            showAuthScreen();
+                        });
+                } catch (e) {
+                    console.error('Erro ao restaurar sessão:', e);
+                    localStorage.removeItem('authToken');
+                    localStorage.removeItem('currentUser');
+                    showAuthScreen();
+                }
             } else {
                 showAuthScreen();
+            }
+        }
+
+        async function verifyTokenWithServer(token) {
+            try {
+                const response = await fetch('/api/verify-token?token=' + token);
+                const data = await response.json();
+                return data.valid === true;
+            } catch (err) {
+                console.error('Erro ao verificar token:', err);
+                return false;
             }
         }
 
@@ -2299,7 +2655,7 @@
                 socket.disconnect();
             }
             
-            socket = io("https://irrigate-unpopular-domestic.ngrok-free.dev", {
+            socket = io(window.location.origin, {
                 transports: ['websocket'],
                 reconnection: true,
                 reconnectionAttempts: 5,
@@ -2606,7 +2962,7 @@
             const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
             if (square) {
                 square.classList.add('selected');
-                playSound(piece.type);
+                // playSound(piece.type); // Som removido
             }
 
             // BUG FIX #1 & #6: Show only legal moves (filtered for check) on the board
@@ -2893,7 +3249,7 @@
             }
 
             if (capturedPiece) {
-                playSound('capture');
+                // playSound('capture'); // Som removido
                 
                 // EFEITO GLOBAL: Camera Shake
                 const gameContainer = document.querySelector('.game-container');
@@ -2989,7 +3345,7 @@
                     }
                 }, 650);
             } else {
-                playSound(piece.type);
+                // playSound(piece.type); // Som removido
             }
 
             // Switch player first, then emit
@@ -3835,7 +4191,7 @@
          //     }
          //     
          //     updateUndoButton();
-        }
+        // }
 
         function updateUndoButton() {
             const undoBtn = document.querySelector('.undo-button');
@@ -4063,6 +4419,256 @@
             }
             
             return false;
+        }
+
+        
+        // ====== SISTEMA DE TORNEIOS E PAGAMENTOS ======
+         let selectedTournament = null;
+         let selectedPaymentMethod = null;
+
+         async function showTournaments() {
+            const modal = document.getElementById('tournamentsModal');
+            const tournamentsList = document.getElementById('tournamentsList');
+            
+            modal.classList.add('active');
+            tournamentsList.innerHTML = '<div class="loading">Carregando torneios...</div>';
+
+            try {
+                const response = await fetch('/api/tournaments');
+                const data = await response.json();
+
+                if (data.success && data.tournaments.length > 0) {
+                    tournamentsList.innerHTML = data.tournaments
+                        .map(tournament => `
+                            <div class="tournament-card">
+                                <div class="tournament-name">${tournament.name}</div>
+                                <div class="tournament-info">
+                                    <div class="tournament-info-item">
+                                        💰 R$ ${tournament.entryFee.toFixed(2)}
+                                    </div>
+                                    <div class="tournament-info-item">
+                                        👥 ${tournament.participants}/${tournament.maxParticipants}
+                                    </div>
+                                    <div class="tournament-info-item">
+                                        📍 ${tournament.spotsAvailable} vagas
+                                    </div>
+                                </div>
+                                <p style="color: rgba(255, 255, 255, 0.7); margin: 10px 0; font-size: 0.9em;">
+                                    ${tournament.description}
+                                </p>
+                                <button class="join-tournament-btn" 
+                                        onclick="joinTournament('${tournament.id}', ${tournament.entryFee}, '${tournament.name}')"
+                                        ${tournament.spotsAvailable <= 0 ? 'disabled' : ''}>
+                                    ${tournament.spotsAvailable <= 0 ? 'TORNEIO CHEIO' : 'ENTRAR AGORA'}
+                                </button>
+                            </div>
+                        `).join('');
+                } else {
+                    tournamentsList.innerHTML = '<div class="loading">Nenhum torneio disponível</div>';
+                }
+            } catch (err) {
+                console.error('Erro ao carregar torneios:', err);
+                tournamentsList.innerHTML = '<div class="loading" style="color: #ff6666;">Erro ao carregar torneios</div>';
+            }
+        }
+
+        function closeTournaments() {
+            const modal = document.getElementById('tournamentsModal');
+            modal.classList.remove('active');
+        }
+
+        function joinTournament(tournamentId, entryFee, tournamentName) {
+            selectedTournament = {
+                id: tournamentId,
+                entryFee: entryFee,
+                name: tournamentName
+            };
+
+            showPaymentModal(tournamentId, entryFee, tournamentName);
+        }
+
+        function showPaymentModal(tournamentId, entryFee, tournamentName) {
+            const modal = document.getElementById('paymentModal');
+            const paymentDetails = document.getElementById('paymentDetails');
+            const pixBtn = document.getElementById('pixBtn');
+            const cardBtn = document.getElementById('cardBtn');
+
+            // Reset dos botões
+            pixBtn.classList.remove('selected');
+            cardBtn.classList.remove('selected');
+            pixBtn.disabled = false;
+            cardBtn.disabled = false;
+            pixBtn.textContent = 'PIX';
+            cardBtn.textContent = 'Cartão';
+            selectedPaymentMethod = null;
+
+            // Calcula a taxa da banca (5%)
+            const houseFee = parseFloat((entryFee * 0.05).toFixed(2));
+            const playerAmount = parseFloat((entryFee - houseFee).toFixed(2));
+
+            paymentDetails.innerHTML = `
+                <div class="detail-line">
+                    <span class="detail-label">Torneio:</span>
+                    <span class="detail-value">${tournamentName}</span>
+                </div>
+                <div class="detail-line">
+                    <span class="detail-label">Valor da Entrada:</span>
+                    <span class="detail-value">R$ ${entryFee.toFixed(2)}</span>
+                </div>
+                <div class="detail-line">
+                    <span class="detail-label">Jogador:</span>
+                    <span class="detail-value">${currentUser.username}</span>
+                </div>
+                <div class="detail-line" style="background: rgba(255, 100, 100, 0.1); padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    <span class="detail-label">Taxa da Banca (5%):</span>
+                    <span class="detail-value" style="color: #ff6464;">- R$ ${houseFee.toFixed(2)}</span>
+                </div>
+                <div class="detail-line" style="background: rgba(0, 255, 150, 0.1); padding: 10px; border-radius: 5px; margin: 10px 0;">
+                    <span class="detail-label">Valor para Jogadores:</span>
+                    <span class="detail-value" style="color: #00ff96;">R$ ${playerAmount.toFixed(2)}</span>
+                </div>
+                <div class="detail-line" style="border-bottom: 2px solid rgba(0, 255, 255, 0.3) !important; padding-bottom: 15px !important; margin-bottom: 15px !important;">
+                    <span class="detail-label">Total a Pagar:</span>
+                    <span class="detail-value" style="font-size: 1.2em;">R$ ${entryFee.toFixed(2)}</span>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closePayment() {
+            const modal = document.getElementById('paymentModal');
+            const pixBtn = document.getElementById('pixBtn');
+            const cardBtn = document.getElementById('cardBtn');
+            
+            // Remove seleção
+            pixBtn.classList.remove('selected');
+            cardBtn.classList.remove('selected');
+            pixBtn.disabled = false;
+            cardBtn.disabled = false;
+            pixBtn.textContent = 'PIX';
+            cardBtn.textContent = 'Cartão';
+            selectedPaymentMethod = null;
+            
+            modal.classList.remove('active');
+        }
+
+        async function processPIX() {
+            if (!selectedTournament || !currentUser) {
+                alert('Erro: Dados incompletos');
+                return;
+            }
+
+            const pixBtn = document.getElementById('pixBtn');
+            const cardBtn = document.getElementById('cardBtn');
+            
+            // Remove seleção anterior
+            pixBtn.classList.remove('selected');
+            cardBtn.classList.remove('selected');
+            
+            // Marca PIX como selecionado
+            pixBtn.classList.add('selected');
+            selectedPaymentMethod = 'pix';
+
+            pixBtn.disabled = true;
+            cardBtn.disabled = true;
+            pixBtn.textContent = 'Processando PIX...';
+
+            try {
+                const response = await fetch('/api/create-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tournamentId: selectedTournament.id,
+                        userId: currentUser.id,
+                        username: currentUser.username,
+                        amount: selectedTournament.entryFee,
+                        description: selectedTournament.name,
+                        paymentMethod: 'pix'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.initPoint) {
+                    console.log('PIX criado com sucesso:', data.preferenceId);
+                    console.log('Detalhes - Valor: R$ ' + data.amount + ' | Banca: R$ ' + data.houseFee + ' | Jogadores: R$ ' + data.playerAmount);
+                    // Redireciona para o Mercado Pago
+                    window.location.href = data.initPoint;
+                } else {
+                    alert('Erro ao gerar PIX: ' + (data.error || 'Erro desconhecido'));
+                    pixBtn.disabled = false;
+                    cardBtn.disabled = false;
+                    pixBtn.classList.remove('selected');
+                    pixBtn.textContent = 'PIX';
+                }
+            } catch (err) {
+                console.error('Erro ao processar PIX:', err);
+                alert('Erro ao processar pagamento PIX');
+                pixBtn.disabled = false;
+                cardBtn.disabled = false;
+                pixBtn.classList.remove('selected');
+                pixBtn.textContent = 'PIX';
+            }
+        }
+
+        async function processCard() {
+            if (!selectedTournament || !currentUser) {
+                alert('Erro: Dados incompletos');
+                return;
+            }
+
+            const pixBtn = document.getElementById('pixBtn');
+            const cardBtn = document.getElementById('cardBtn');
+            
+            // Remove seleção anterior
+            pixBtn.classList.remove('selected');
+            cardBtn.classList.remove('selected');
+            
+            // Marca Cartão como selecionado
+            cardBtn.classList.add('selected');
+            selectedPaymentMethod = 'card';
+
+            cardBtn.disabled = true;
+            pixBtn.disabled = true;
+            cardBtn.textContent = 'Processando Cartão...';
+
+            try {
+                const response = await fetch('/api/create-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tournamentId: selectedTournament.id,
+                        userId: currentUser.id,
+                        username: currentUser.username,
+                        amount: selectedTournament.entryFee,
+                        description: selectedTournament.name,
+                        paymentMethod: 'card'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.initPoint) {
+                    console.log('Cartão criado com sucesso:', data.preferenceId);
+                    console.log('Detalhes - Valor: R$ ' + data.amount + ' | Banca: R$ ' + data.houseFee + ' | Jogadores: R$ ' + data.playerAmount);
+                    // Redireciona para o Mercado Pago
+                    window.location.href = data.initPoint;
+                } else {
+                    alert('Erro ao gerar link de pagamento: ' + (data.error || 'Erro desconhecido'));
+                    cardBtn.disabled = false;
+                    pixBtn.disabled = false;
+                    cardBtn.classList.remove('selected');
+                    cardBtn.textContent = 'Cartão';
+                }
+            } catch (err) {
+                console.error('Erro ao processar cartão:', err);
+                alert('Erro ao processar pagamento com cartão');
+                cardBtn.disabled = false;
+                pixBtn.disabled = false;
+                cardBtn.classList.remove('selected');
+                cardBtn.textContent = 'Cartão';
+            }
         }
 
         board = createInitialBoard();
