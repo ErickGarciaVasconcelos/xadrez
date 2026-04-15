@@ -3448,16 +3448,16 @@
         }
 
         function switchPlayer() {
-            // currentPlayer already updated in movePiece before this call
-            updateTurnIndicator();
-            
-            // BUG FIX #2: Only trigger AI in local mode when it's black's turn
-            if (gameMode === 'local' && currentPlayer === 'black' && gameActive) {
-                setTimeout(() => makeAIMove(), 500);
-            }
-            
-            checkGameStatus();
-        }
+             // currentPlayer already updated in movePiece before this call
+             // updateTurnIndicator() - função foi desabilitada
+             
+             // BUG FIX #2: Only trigger AI in local mode when it's black's turn
+             if (gameMode === 'local' && currentPlayer === 'black' && gameActive) {
+                 setTimeout(() => makeAIMove(), 500);
+             }
+             
+             checkGameStatus();
+         }
 
         const pieceValues = {
             pawn: 100,
@@ -4248,8 +4248,8 @@
             }
             
             createBoard();
-            updateTurnIndicator();
-        }
+             // Não chama updateTurnIndicator() - função foi desabilitada
+         }
 
          // REMOVIDO: Indicador de turno desabilitado
          // function updateTurnIndicator() {
@@ -4437,11 +4437,11 @@
              const modal = document.getElementById('victoryModal');
              if (modal) modal.classList.remove('show');
              
-             createBoard();
-             updateTurnIndicator();
-             document.getElementById('gameStatus').innerHTML = '';
-             
-             // Se está em modo online e clicou "Novo Jogo", desconecta da partida
+              createBoard();
+              // updateTurnIndicator() - função foi desabilitada
+              document.getElementById('gameStatus').innerHTML = '';
+              
+              // Se está em modo online e clicou "Novo Jogo", desconecta da partida
              if (gameMode === 'online' && socket) {
                  // Verifica se o botão clicado foi "Novo Jogo"
                  const modeButtons = document.querySelectorAll('.mode-btn');
@@ -4782,9 +4782,9 @@
             }
         }
 
-        board = createInitialBoard();
-        createBoard();
-        updateTurnIndicator();
-    </script>
-</body>
-</html>
+         board = createInitialBoard();
+         createBoard();
+         // updateTurnIndicator() - função foi desabilitada
+     </script>
+ </body>
+ </html>
