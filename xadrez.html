@@ -1576,9 +1576,6 @@
                 </div>
 
                 <!-- BUG FIX #8: Added missing #turnIndicator element referenced by updateTurnIndicator() -->
-                <div class="info-panel">
-                    <div id="turnIndicator" class="turn-indicator turn-white">Vez das Brancas</div>
-                </div>
                 
                 <div class="mode-selector" id="modeSelector">
                     <!-- BUG FIX #5: Pass event explicitly via onclick to avoid relying on global `event` -->
@@ -2343,7 +2340,7 @@
                 currentPlayer = 'white';
                 isMyTurn = (playerColor === 'white');
                 createBoard();
-                updateTurnIndicator();
+                // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
             });
             
             socket.on('gameState', (state) => {
@@ -2356,7 +2353,7 @@
                     document.getElementById('whiteScore').textContent = whiteWins;
                     document.getElementById('blackScore').textContent = blackWins;
                     createBoard();
-                    updateTurnIndicator();
+                    // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
                 }
             });
             
@@ -2365,7 +2362,7 @@
                 currentPlayer = 'white';
                 isMyTurn = (playerColor === 'white');
                 createBoard();
-                updateTurnIndicator();
+                // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
             });
             
             socket.on('opponentJoined', (opponentInfo) => {
@@ -2388,7 +2385,7 @@
                 console.log('isMyTurn após opponentMove:', isMyTurn);
                 
                 createBoard();
-                updateTurnIndicator();
+                // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
                 checkGameStatus();
             });
             
@@ -2406,7 +2403,7 @@
                 moveHistory = [];
                 isMyTurn = (playerColor === 'white');
                 createBoard();
-                updateTurnIndicator();
+                // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
                 document.getElementById('gameStatus').innerHTML = '';
             });
             
@@ -3009,7 +3006,7 @@
                     currentPlayer: nextPlayer
                 });
                 createBoard();
-                updateTurnIndicator();
+                // updateTurnIndicator(); // Removido: Indicador de turno desabilitado
                 checkGameStatus();
             } else {
                 createBoard();
@@ -3822,21 +3819,22 @@
             updateTurnIndicator();
         }
 
-        function updateTurnIndicator() {
-            const indicator = document.getElementById('turnIndicator');
-            if (!indicator) return;
-            
-            indicator.className = `turn-indicator ${currentPlayer === 'white' ? 'turn-white' : 'turn-black'}`;
-            
-            if (gameMode === 'online') {
-                const isMyTurnNow = currentPlayer === playerColor;
-                const colorName = currentPlayer === 'white' ? 'Brancas' : 'Pretas';
-                indicator.textContent = isMyTurnNow ? `Sua vez (${colorName})` : `Vez do oponente (${colorName})`;
-            } else {
-                indicator.textContent = `Vez das ${currentPlayer === 'white' ? 'Brancas' : 'Pretas'}`;
-            }
-            
-            updateUndoButton();
+         // REMOVIDO: Indicador de turno desabilitado
+         // function updateTurnIndicator() {
+         //     const indicator = document.getElementById('turnIndicator');
+         //     if (!indicator) return;
+         //     
+         //     indicator.className = `turn-indicator ${currentPlayer === 'white' ? 'turn-white' : 'turn-black'}`;
+         //     
+         //     if (gameMode === 'online') {
+         //         const isMyTurnNow = currentPlayer === playerColor;
+         //         const colorName = currentPlayer === 'white' ? 'Brancas' : 'Pretas';
+         //         indicator.textContent = isMyTurnNow ? `Sua vez (${colorName})` : `Vez do oponente (${colorName})`;
+         //     } else {
+         //         indicator.textContent = `Vez das ${currentPlayer === 'white' ? 'Brancas' : 'Pretas'}`;
+         //     }
+         //     
+         //     updateUndoButton();
         }
 
         function updateUndoButton() {

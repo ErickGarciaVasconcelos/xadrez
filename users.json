@@ -1,3 +1,13 @@
 {
-  "users": []
+  "users": [
+    {
+      "id": "1776222930568",
+      "username": "CabeçaDePika",
+      "email": "erickvasconcelos92@gmail.com",
+      "password": "$2b$10$sxyLMEhrwxlz8D/mgYlIWezM0EIgtmqCoHGBgu4Vx6f8/3hNNSN0S",
+      "wins": 0,
+      "losses": 0,
+      "createdAt": "2026-04-15T03:15:30.568Z"
+    }
+  ]
 }
