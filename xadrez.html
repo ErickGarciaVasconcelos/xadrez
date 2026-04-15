@@ -16,12 +16,20 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            background: linear-gradient(135deg, #1a0a2e 0%, #2d0a4e 25%, #0a2a4e 50%, #1a0a2e 75%, #2d0a4e 100%);
+            background-size: 400% 400%;
+            animation: psychedelicBG 15s ease infinite;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 15px;
+        }
+
+        @keyframes psychedelicBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
         }
 
         .main-container {
@@ -33,6 +41,11 @@
             align-items: flex-start;
             justify-content: center;
             padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 30px rgba(138, 43, 226, 0.2), 0 0 60px rgba(0, 255, 255, 0.1);
         }
 
         @media (max-width: 900px) {
@@ -807,11 +820,12 @@
             background: #c44569;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(138, 43, 226, 0.5), 0 0 40px rgba(255, 20, 147, 0.3);
             width: 100%;
             max-width: 500px;
             margin: 0 auto;
             padding: 2px;
+            border: 2px solid rgba(138, 43, 226, 0.6);
         }
 
         #threeContainer {
@@ -851,10 +865,12 @@
 
         .square.light {
             background-color: #f0e6d3 !important;
+            box-shadow: inset 0 0 10px rgba(138, 43, 226, 0.3);
         }
 
         .square.dark {
             background-color: #8b7355 !important;
+            box-shadow: inset 0 0 10px rgba(255, 20, 147, 0.3);
         }
 
         .square:hover {
@@ -891,12 +907,14 @@
 
         .piece {
             user-select: none;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.4), 0 0 10px rgba(255, 255, 255, 0.3);
             transition: transform 0.2s ease;
+            filter: drop-shadow(0 0 5px rgba(138, 43, 226, 0.5));
         }
 
         .piece:hover {
             transform: scale(1.15);
+            filter: drop-shadow(0 0 15px rgba(255, 20, 147, 0.8));
         }
 
         .chessboard.flipped .piece:hover {
@@ -905,12 +923,165 @@
 
         .white-piece {
             color: #ffffff;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8), -1px -1px 2px rgba(0, 0, 0, 0.3);
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8), -1px -1px 2px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 255, 255, 0.5);
         }
 
         .black-piece {
             color: #000000;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
         }
+
+         /* ====== ANIMAÇÕES DE COMBATE - PEÇA ATACADORA ====== */
+         
+         /* PEÃO: Soco rápido para frente e para trás */
+         @keyframes anim-soco {
+             0% { transform: translateY(0) scale(1); filter: brightness(1); }
+             15% { transform: translateY(-30px) scale(1.1); filter: brightness(1.3); }
+             30% { transform: translateY(40px) scale(0.95); filter: brightness(0.9); }
+             45% { transform: translateY(-10px) scale(1.05); filter: brightness(1.2); }
+             100% { transform: translateY(0) scale(1); filter: brightness(1); }
+         }
+
+         /* TORRE: Rotação rápida com rastro de luz (tiro de canhão) */
+         @keyframes anim-tiro {
+             0% { transform: rotate(0deg) scale(1); filter: brightness(1) drop-shadow(0 0 0px #ffff00); }
+             25% { transform: rotate(360deg) scale(1.05); filter: brightness(1.5) drop-shadow(0 0 15px #ffff00); }
+             50% { transform: rotate(720deg) scale(1.1); filter: brightness(2) drop-shadow(0 0 25px #ff6600); }
+             75% { transform: rotate(1080deg) scale(1.05); filter: brightness(1.5) drop-shadow(0 0 15px #ffff00); }
+             100% { transform: rotate(0deg) scale(1); filter: brightness(1); }
+         }
+
+         /* BISPO: Aura brilhante com tremor (exorcismo) */
+         @keyframes anim-exorcismo {
+             0% { filter: brightness(1) drop-shadow(0 0 0px gold); transform: scale(1); }
+             25% { filter: brightness(1.5) drop-shadow(0 0 10px gold); transform: scale(1.05); }
+             50% { filter: brightness(2.5) drop-shadow(0 0 30px gold) drop-shadow(0 0 50px rgba(255,215,0,0.5)); transform: scale(1.15); }
+             75% { filter: brightness(1.5) drop-shadow(0 0 10px gold); transform: scale(1.05); }
+             100% { filter: brightness(1); transform: scale(1); }
+         }
+
+         /* CAVALO: Empinada e pisada forte */
+         @keyframes anim-empinada {
+             0% { transform: translateY(0) scaleY(1); filter: brightness(1); }
+             20% { transform: translateY(-40px) scaleY(0.8); filter: brightness(1.2); }
+             40% { transform: translateY(-50px) scaleY(0.7) rotateX(20deg); filter: brightness(1.4); }
+             60% { transform: translateY(30px) scaleY(1.1) rotateX(-10deg); filter: brightness(0.8); }
+             80% { transform: translateY(10px) scaleY(0.95); filter: brightness(1.1); }
+             100% { transform: translateY(0) scaleY(1); filter: brightness(1); }
+         }
+
+         /* RAINHA: Rotação graciosa 360° com tapa majestoso */
+         @keyframes anim-rainha {
+             0% { transform: rotate(0deg) scale(1); filter: brightness(1) drop-shadow(0 0 0px magenta); }
+             25% { transform: rotate(90deg) scale(1.08); filter: brightness(1.3) drop-shadow(0 0 10px magenta); }
+             50% { transform: rotate(180deg) scale(1.15); filter: brightness(1.6) drop-shadow(0 0 20px magenta) drop-shadow(0 0 30px cyan); }
+             75% { transform: rotate(270deg) scale(1.08); filter: brightness(1.3) drop-shadow(0 0 10px magenta); }
+             85% { transform: rotate(360deg) translateX(35px) scale(1); filter: brightness(1.8) drop-shadow(0 0 15px magenta); }
+             100% { transform: rotate(0deg) translateX(0) scale(1); filter: brightness(1); }
+         }
+
+         /* REI: Brilho dourado com onda de choque de expansão */
+         @keyframes anim-rei {
+             0% { filter: brightness(1) drop-shadow(0 0 0px gold); transform: scale(1); }
+             40% { filter: brightness(2.5) drop-shadow(0 0 30px gold) drop-shadow(0 0 60px rgba(255,215,0,0.6)); transform: scale(1.1); }
+             100% { filter: brightness(1.5) drop-shadow(0 0 10px gold); transform: scale(0.95); }
+         }
+
+         /* Onda de choque do Rei (circunferência em expansão) */
+         @keyframes onda-choque {
+             0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.8), 0 0 0 0 rgba(255, 215, 0, 0.6); }
+             50% { box-shadow: 0 0 0 30px rgba(255, 215, 0, 0.4), 0 0 0 60px rgba(255, 215, 0, 0.2); }
+             100% { box-shadow: 0 0 0 80px rgba(255, 215, 0, 0), 0 0 0 120px rgba(255, 215, 0, 0); }
+         }
+
+         /* ====== ANIMAÇÕES DA PEÇA CAPTURADA ====== */
+         
+         /* Desaparecimento com fumaça/brilho */
+         @keyframes capturar-desaparecer {
+             0% { opacity: 1; transform: scale(1) rotate(0deg); filter: brightness(1) drop-shadow(0 0 0px); }
+             30% { opacity: 1; transform: scale(1.3) rotate(10deg); filter: brightness(2) drop-shadow(0 0 10px rgba(255,100,0,0.8)); }
+             60% { opacity: 0.7; transform: scale(1.8) rotate(20deg); filter: brightness(3) drop-shadow(0 0 25px rgba(255,200,0,0.6)); }
+             85% { opacity: 0.3; transform: scale(2.2) rotate(30deg); filter: brightness(5) drop-shadow(0 0 40px rgba(255,255,100,0.4)); }
+             100% { opacity: 0; transform: scale(0.5) rotate(45deg); filter: brightness(0) drop-shadow(0 0 0px); }
+         }
+
+         /* Tremor violento da peça capturada (para Bispo) */
+         @keyframes anim-tremular {
+             0%, 100% { transform: translate(0, 0) rotate(0deg); }
+             5% { transform: translate(-8px, -8px) rotate(-2deg); }
+             10% { transform: translate(8px, -8px) rotate(2deg); }
+             15% { transform: translate(-8px, 8px) rotate(-2deg); }
+             20% { transform: translate(8px, 8px) rotate(2deg); }
+             25% { transform: translate(-6px, -6px) rotate(-1deg); }
+             30% { transform: translate(6px, -6px) rotate(1deg); }
+             35% { transform: translate(-6px, 6px) rotate(-1deg); }
+             40% { transform: translate(6px, 6px) rotate(1deg); }
+             45% { transform: translate(-4px, -4px); }
+             50% { transform: translate(4px, -4px); }
+             55% { transform: translate(-4px, 4px); }
+             60% { transform: translate(4px, 4px); }
+             65% { transform: translate(-2px, -2px); }
+             70% { transform: translate(2px, -2px); }
+             75% { transform: translate(-2px, 2px); }
+             80% { transform: translate(2px, 2px); }
+             90% { transform: translate(-1px, -1px); }
+             95% { transform: translate(1px, -1px); }
+         }
+
+         /* Efeito de empurrão (para Rei) */
+         @keyframes empujar-fora {
+             0% { transform: translate(0, 0) scale(1); opacity: 1; filter: brightness(1); }
+             30% { transform: translate(15px, -15px) scale(1.05); opacity: 0.9; filter: brightness(1.2); }
+             60% { transform: translate(35px, -35px) scale(0.8); opacity: 0.5; filter: brightness(2); }
+             100% { transform: translate(60px, -60px) scale(0.3); opacity: 0; filter: brightness(5); }
+         }
+
+         /* Rastro de partículas coloridas (Rainha) */
+         @keyframes anim-rastro {
+             0%, 100% { text-shadow: 0 0 10px magenta, 0 0 20px cyan, 0 0 30px yellow; }
+             25% { text-shadow: 0 0 20px magenta, 0 0 40px cyan, 0 0 60px yellow, 
+                              10px 10px 30px rgba(255,0,255,0.6), -10px -10px 30px rgba(0,255,255,0.6); }
+             50% { text-shadow: 0 0 30px magenta, 0 0 60px cyan, 0 0 90px yellow,
+                              15px 15px 40px rgba(255,100,0,0.8), -15px -15px 40px rgba(0,255,255,0.8); }
+             75% { text-shadow: 0 0 20px magenta, 0 0 40px cyan, 0 0 60px yellow,
+                              10px 10px 30px rgba(255,0,255,0.6), -10px -10px 30px rgba(0,255,255,0.6); }
+         }
+
+         /* ====== CLASSES CSS PARA AS ANIMAÇÕES ====== */
+         .piece.anim-soco { 
+             animation: anim-soco 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+         }
+         
+         .piece.anim-tiro { 
+             animation: anim-tiro 0.6s ease-out forwards;
+         }
+         
+         .piece.anim-exorcismo { 
+             animation: anim-exorcismo 0.7s ease-in-out forwards;
+         }
+         
+         .piece.anim-empinada { 
+             animation: anim-empinada 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+         }
+         
+         .piece.anim-rainha { 
+             animation: anim-rainha 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+         }
+         
+         .piece.anim-rei { 
+             animation: anim-rei 0.5s ease-out forwards;
+             animation-delay: 0.1s;
+         }
+         
+         .piece.captured { 
+             animation: capturar-desaparecer 0.5s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+             pointer-events: none;
+         }
+         
+         .piece.empurrado { 
+             animation: empujar-fora 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+             pointer-events: none;
+         }
     </style>
 </head>
 <body>
@@ -1142,34 +1313,125 @@
         }
 
         function playSound(type) {
-            try {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
+             try {
+                 const osc = audioCtx.createOscillator();
+                 const gain = audioCtx.createGain();
+                 osc.connect(gain);
+                 gain.connect(audioCtx.destination);
 
-                const sounds = {
-                    pawn: { freq: 200, type: 'sine', duration: 0.1 },
-                    knight: { freq: 250, type: 'triangle', duration: 0.2 },
-                    bishop: { freq: 300, type: 'sine', duration: 0.15 },
-                    rook: { freq: 150, type: 'square', duration: 0.25 },
-                    queen: { freq: 350, type: 'sine', duration: 0.3 },
-                    king: { freq: 400, type: 'sine', duration: 0.35 },
-                    capture: { freq: 100, type: 'sawtooth', duration: 0.4 },
-                    move: { freq: 180, type: 'sine', duration: 0.08 }
-                };
+                 const sounds = {
+                     pawn: { freq: 200, type: 'sine', duration: 0.1 },
+                     knight: { freq: 250, type: 'triangle', duration: 0.2 },
+                     bishop: { freq: 300, type: 'sine', duration: 0.15 },
+                     rook: { freq: 150, type: 'square', duration: 0.25 },
+                     queen: { freq: 350, type: 'sine', duration: 0.3 },
+                     king: { freq: 400, type: 'sine', duration: 0.35 },
+                     capture: { freq: 100, type: 'sawtooth', duration: 0.4 },
+                     move: { freq: 180, type: 'sine', duration: 0.08 }
+                 };
 
-                const sound = sounds[type] || sounds.move;
-                osc.type = sound.type;
-                osc.frequency.value = sound.freq;
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + sound.duration);
-                osc.start(audioCtx.currentTime);
-                osc.stop(audioCtx.currentTime + sound.duration);
-            } catch(e) {
-                console.log('Audio error:', e);
-            }
-        }
+                 const sound = sounds[type] || sounds.move;
+                 osc.type = sound.type;
+                 osc.frequency.value = sound.freq;
+                 gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + sound.duration);
+                 osc.start(audioCtx.currentTime);
+                 osc.stop(audioCtx.currentTime + sound.duration);
+             } catch(e) {
+                 console.log('Audio error:', e);
+             }
+         }
+
+         // Função para criar efeitos de partículas nas capturas
+         function createParticleEffect(row, col, effectType, color) {
+             const square = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+             if (!square) return;
+
+             const rect = square.getBoundingClientRect();
+             const centerX = rect.left + rect.width / 2;
+             const centerY = rect.top + rect.height / 2;
+
+             // Cores baseadas no tipo de efeito
+             const particleColors = {
+                 punch: ['#ff6600', '#ffaa00', '#ff3300'],
+                 cannon: ['#ffff00', '#ff8800', '#ffaa00'],
+                 exorcism: ['#ffd700', '#ffff00', '#fff0f5'],
+                 stomp: ['#ff6b6b', '#ff8c42', '#ff6600'],
+                 slash: ['#ff1493', '#00ffff', '#ffff00'],
+                 shockwave: ['#ffd700', '#ffff00', '#fff700']
+             };
+
+             const colors = particleColors[effectType] || particleColors.punch;
+             const particleCount = effectType === 'shockwave' ? 12 : 8;
+
+             // Criar confete ou partículas visuais
+             if (typeof confetti === 'function') {
+                 const angleStep = (360 / particleCount) * (Math.PI / 180);
+                 
+                 for (let i = 0; i < particleCount; i++) {
+                     const angle = angleStep * i;
+                     const velocity = effectType === 'shockwave' ? 8 : 5;
+                     const vx = Math.cos(angle) * velocity;
+                     const vy = Math.sin(angle) * velocity;
+
+                     confetti({
+                         particleCount: 1,
+                         angle: (angle * 180) / Math.PI,
+                         spread: 10,
+                         origin: { 
+                             x: centerX / window.innerWidth, 
+                             y: centerY / window.innerHeight 
+                         },
+                         colors: [colors[i % colors.length]],
+                         velocity: velocity,
+                         decay: 0.9
+                     });
+                 }
+             }
+
+             // Adicionar efeito visual de brilho no quadrado
+             const glowDiv = document.createElement('div');
+             glowDiv.style.position = 'fixed';
+             glowDiv.style.left = centerX + 'px';
+             glowDiv.style.top = centerY + 'px';
+             glowDiv.style.width = '20px';
+             glowDiv.style.height = '20px';
+             glowDiv.style.marginLeft = '-10px';
+             glowDiv.style.marginTop = '-10px';
+             glowDiv.style.borderRadius = '50%';
+             glowDiv.style.pointerEvents = 'none';
+             glowDiv.style.zIndex = '999';
+
+             // Estilos específicos por tipo de efeito
+             if (effectType === 'cannon') {
+                 glowDiv.style.background = 'radial-gradient(circle, #ffff00, #ff8800, transparent)';
+                 glowDiv.style.boxShadow = '0 0 30px 10px rgba(255, 255, 0, 0.6)';
+                 glowDiv.style.animation = 'pulse 0.3s ease-out forwards';
+             } else if (effectType === 'exorcism') {
+                 glowDiv.style.background = 'radial-gradient(circle, #ffd700, #ffff00, transparent)';
+                 glowDiv.style.boxShadow = '0 0 40px 15px rgba(255, 215, 0, 0.7)';
+                 glowDiv.style.animation = 'pulse 0.4s ease-out forwards';
+             } else if (effectType === 'shockwave') {
+                 glowDiv.style.background = 'radial-gradient(circle, #ffd700, transparent)';
+                 glowDiv.style.boxShadow = '0 0 50px 20px rgba(255, 215, 0, 0.8)';
+                 glowDiv.style.animation = 'onda-choque 0.6s ease-out forwards';
+             } else if (effectType === 'slash') {
+                 glowDiv.style.background = 'radial-gradient(circle, #ff1493, #00ffff, transparent)';
+                 glowDiv.style.boxShadow = '0 0 35px 12px rgba(255, 20, 147, 0.7)';
+                 glowDiv.style.animation = 'pulse 0.5s ease-out forwards';
+             } else {
+                 glowDiv.style.background = 'radial-gradient(circle, #ff6600, #ffaa00, transparent)';
+                 glowDiv.style.boxShadow = '0 0 25px 8px rgba(255, 102, 0, 0.6)';
+                 glowDiv.style.animation = 'pulse 0.3s ease-out forwards';
+             }
+
+             document.body.appendChild(glowDiv);
+
+             // Remover elemento após animação
+             setTimeout(() => {
+                 glowDiv.remove();
+             }, 600);
+         }
 
         const pieces = {
             white: {
@@ -1334,8 +1596,8 @@
                 socket.disconnect();
             }
             
-            socket = io({
-                transports: ['websocket', 'polling'],
+            socket = io("https://irrigate-unpopular-domestic.ngrok-free.dev", {
+                transports: ['websocket'],
                 reconnection: true,
                 reconnectionAttempts: 5,
                 reconnectionDelay: 1000
@@ -1872,6 +2134,71 @@
 
             if (capturedPiece) {
                 playSound('capture');
+                
+                const fromSquare = document.querySelector(`[data-row="${fromRow}"][data-col="${fromCol}"]`);
+                const toSquare = document.querySelector(`[data-row="${toRow}"][data-col="${toCol}"]`);
+                
+                // Aplicar animação de tremor na peça capturada (especial para Bispo)
+                if (toSquare && piece.type === 'bishop') {
+                    toSquare.classList.add('anim-tremular');
+                }
+                
+                // Aplicar animação na peça capturadora após pequeño delay
+                if (fromSquare && piece) {
+                    setTimeout(() => {
+                        let animClass = '';
+                        switch(piece.type) {
+                            case 'pawn': 
+                                animClass = 'anim-soco'; 
+                                createParticleEffect(fromRow, fromCol, 'punch', piece.color);
+                                break;
+                            case 'rook': 
+                                animClass = 'anim-tiro'; 
+                                createParticleEffect(fromRow, fromCol, 'cannon', piece.color);
+                                break;
+                            case 'bishop': 
+                                animClass = 'anim-exorcismo'; 
+                                createParticleEffect(toRow, toCol, 'exorcism', piece.color);
+                                break;
+                            case 'knight': 
+                                animClass = 'anim-empinada'; 
+                                createParticleEffect(fromRow, fromCol, 'stomp', piece.color);
+                                break;
+                            case 'queen': 
+                                animClass = 'anim-rainha'; 
+                                createParticleEffect(fromRow, fromCol, 'slash', piece.color);
+                                break;
+                            case 'king': 
+                                animClass = 'anim-rei';
+                                createParticleEffect(toRow, toCol, 'shockwave', piece.color);
+                                if (toSquare) {
+                                    // Aplicar empurrão na peça capturada
+                                    toSquare.classList.add('empurrado');
+                                }
+                                break;
+                        }
+                        if (animClass && fromSquare) {
+                            fromSquare.classList.add(animClass);
+                        }
+                    }, 30);
+                }
+                
+                // Aplicar animação de desaparecimento na peça capturada
+                if (toSquare) {
+                    setTimeout(() => {
+                        toSquare.classList.add('captured');
+                    }, 60);
+                }
+                
+                // Remover classes de animação após a conclusão
+                setTimeout(() => {
+                    if (toSquare) {
+                        toSquare.classList.remove('captured', 'anim-tremular', 'empurrado');
+                    }
+                    if (fromSquare) {
+                        fromSquare.classList.remove('anim-soco', 'anim-tiro', 'anim-exorcismo', 'anim-empinada', 'anim-rainha', 'anim-rei');
+                    }
+                }, 550);
             } else {
                 playSound(piece.type);
             }
