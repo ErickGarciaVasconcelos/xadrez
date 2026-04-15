@@ -1971,40 +1971,42 @@
             checkUserAuthentication();
         });
 
-        function checkUserAuthentication() {
-            const savedToken = localStorage.getItem('authToken');
-            const savedUser = localStorage.getItem('currentUser');
+         function checkUserAuthentication() {
+             const savedToken = localStorage.getItem('authToken');
+             const savedUser = localStorage.getItem('currentUser');
 
-            if (savedToken && savedUser) {
-                try {
-                    authToken = savedToken;
-                    currentUser = JSON.parse(savedUser);
-                    // Valida se o token ainda é válido antes de ocultar a tela de login
-                    verifyTokenWithServer(authToken)
-                        .then(isValid => {
-                            if (isValid) {
-                                hideAuthScreen();
-                            } else {
-                                // Token expirado ou inválido
-                                localStorage.removeItem('authToken');
-                                localStorage.removeItem('currentUser');
-                                showAuthScreen();
-                            }
-                        })
-                        .catch(() => {
-                            // Erro ao verificar - mostra a tela de login por segurança
-                            showAuthScreen();
-                        });
-                } catch (e) {
-                    console.error('Erro ao restaurar sessão:', e);
-                    localStorage.removeItem('authToken');
-                    localStorage.removeItem('currentUser');
-                    showAuthScreen();
-                }
-            } else {
-                showAuthScreen();
-            }
-        }
+             if (savedToken && savedUser) {
+                 try {
+                     authToken = savedToken;
+                     currentUser = JSON.parse(savedUser);
+                     
+                     // Esconde a tela de login IMEDIATAMENTE (sem esperar verificação)
+                     hideAuthScreen();
+                     initializeGame();
+                     
+                     // Verifica o token de forma assíncrona em background
+                     verifyTokenWithServer(authToken)
+                         .then(isValid => {
+                             if (!isValid) {
+                                 // Token expirado - faz logoff
+                                 console.warn('Token expirado, fazendo logoff');
+                                 logout();
+                             }
+                         })
+                         .catch((err) => {
+                             // Erro ao verificar - LOG apenas (não faz logoff)
+                             console.warn('Não conseguiu verificar token com servidor:', err);
+                         });
+                 } catch (e) {
+                     console.error('Erro ao restaurar sessão:', e);
+                     localStorage.removeItem('authToken');
+                     localStorage.removeItem('currentUser');
+                     showAuthScreen();
+                 }
+             } else {
+                 showAuthScreen();
+             }
+         }
 
         async function verifyTokenWithServer(token) {
             try {
@@ -4523,51 +4525,63 @@
          let selectedTournament = null;
          let selectedPaymentMethod = null;
 
-         async function showTournaments() {
-            const modal = document.getElementById('tournamentsModal');
-            const tournamentsList = document.getElementById('tournamentsList');
-            
-            modal.classList.add('active');
-            tournamentsList.innerHTML = '<div class="loading">Carregando torneios...</div>';
+          async function showTournaments() {
+             console.log('showTournaments chamado');
+             const modal = document.getElementById('tournamentsModal');
+             const tournamentsList = document.getElementById('tournamentsList');
+             
+             if (!modal) {
+                 console.error('Modal tournamentsModal não encontrado!');
+                 return;
+             }
+             
+             console.log('Modal encontrado, adicionando classe active');
+             modal.classList.add('active');
+             tournamentsList.innerHTML = '<div class="loading">Carregando torneios...</div>';
 
-            try {
-                const response = await fetch('/api/tournaments');
-                const data = await response.json();
+             try {
+                 console.log('Fazendo fetch para /api/tournaments');
+                 const response = await fetch('/api/tournaments');
+                 console.log('Response status:', response.status);
+                 const data = await response.json();
+                 console.log('Dados recebidos:', data);
 
-                if (data.success && data.tournaments.length > 0) {
-                    tournamentsList.innerHTML = data.tournaments
-                        .map(tournament => `
-                            <div class="tournament-card">
-                                <div class="tournament-name">${tournament.name}</div>
-                                <div class="tournament-info">
-                                    <div class="tournament-info-item">
-                                        💰 R$ ${tournament.entryFee.toFixed(2)}
-                                    </div>
-                                    <div class="tournament-info-item">
-                                        👥 ${tournament.participants}/${tournament.maxParticipants}
-                                    </div>
-                                    <div class="tournament-info-item">
-                                        📍 ${tournament.spotsAvailable} vagas
-                                    </div>
-                                </div>
-                                <p style="color: rgba(255, 255, 255, 0.7); margin: 10px 0; font-size: 0.9em;">
-                                    ${tournament.description}
-                                </p>
-                                <button class="join-tournament-btn" 
-                                        onclick="joinTournament('${tournament.id}', ${tournament.entryFee}, '${tournament.name}')"
-                                        ${tournament.spotsAvailable <= 0 ? 'disabled' : ''}>
-                                    ${tournament.spotsAvailable <= 0 ? 'TORNEIO CHEIO' : 'ENTRAR AGORA'}
-                                </button>
-                            </div>
-                        `).join('');
-                } else {
-                    tournamentsList.innerHTML = '<div class="loading">Nenhum torneio disponível</div>';
-                }
-            } catch (err) {
-                console.error('Erro ao carregar torneios:', err);
-                tournamentsList.innerHTML = '<div class="loading" style="color: #ff6666;">Erro ao carregar torneios</div>';
-            }
-        }
+                 if (data.success && data.tournaments.length > 0) {
+                     console.log('Exibindo', data.tournaments.length, 'torneios');
+                     tournamentsList.innerHTML = data.tournaments
+                         .map(tournament => `
+                             <div class="tournament-card">
+                                 <div class="tournament-name">${tournament.name}</div>
+                                 <div class="tournament-info">
+                                     <div class="tournament-info-item">
+                                         💰 R$ ${tournament.entryFee.toFixed(2)}
+                                     </div>
+                                     <div class="tournament-info-item">
+                                         👥 ${tournament.participants}/${tournament.maxParticipants}
+                                     </div>
+                                     <div class="tournament-info-item">
+                                         📍 ${tournament.spotsAvailable} vagas
+                                     </div>
+                                 </div>
+                                 <p style="color: rgba(255, 255, 255, 0.7); margin: 10px 0; font-size: 0.9em;">
+                                     ${tournament.description}
+                                 </p>
+                                 <button class="join-tournament-btn" 
+                                         onclick="joinTournament('${tournament.id}', ${tournament.entryFee}, '${tournament.name}')"
+                                         ${tournament.spotsAvailable <= 0 ? 'disabled' : ''}>
+                                     ${tournament.spotsAvailable <= 0 ? 'TORNEIO CHEIO' : 'ENTRAR AGORA'}
+                                 </button>
+                             </div>
+                         `).join('');
+                 } else {
+                     console.log('Nenhum torneio disponível ou erro na resposta');
+                     tournamentsList.innerHTML = '<div class="loading">Nenhum torneio disponível</div>';
+                 }
+             } catch (err) {
+                 console.error('Erro ao carregar torneios:', err);
+                 tournamentsList.innerHTML = '<div class="loading" style="color: #ff6666;">Erro ao carregar torneios: ' + err.message + '</div>';
+             }
+         }
 
         function closeTournaments() {
             const modal = document.getElementById('tournamentsModal');
