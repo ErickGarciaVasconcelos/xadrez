@@ -2,6 +2,9 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const bcryptjs = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,8 +17,134 @@ const io = new Server(server, {
 
 const rootDir = __dirname;
 const htmlPath = path.resolve(rootDir, 'xadrez.html');
+const usersFilePath = path.resolve(rootDir, 'users.json');
+const JWT_SECRET = 'your-secret-key-change-in-production';
 
+app.use(express.json());
 app.use(express.static(rootDir));
+
+// Função para ler usuários do arquivo
+function loadUsers() {
+    try {
+        const data = fs.readFileSync(usersFilePath, 'utf-8');
+        return JSON.parse(data).users;
+    } catch (err) {
+        return [];
+    }
+}
+
+// Função para salvar usuários no arquivo
+function saveUsers(users) {
+    fs.writeFileSync(usersFilePath, JSON.stringify({ users }, null, 2));
+}
+
+// Rota de Signup
+app.post('/api/signup', async (req, res) => {
+    try {
+        const { username, password, email } = req.body;
+
+        if (!username || !password || !email) {
+            return res.status(400).json({ error: 'Username, password e email são obrigatórios' });
+        }
+
+        const users = loadUsers();
+        
+        // Verifica se o usuário já existe
+        if (users.find(u => u.username === username)) {
+            return res.status(400).json({ error: 'Usuário já existe' });
+        }
+
+        if (users.find(u => u.email === email)) {
+            return res.status(400).json({ error: 'Email já cadastrado' });
+        }
+
+        // Hash da senha
+        const hashedPassword = await bcryptjs.hash(password, 10);
+
+        const newUser = {
+            id: Date.now().toString(),
+            username,
+            email,
+            password: hashedPassword,
+            wins: 0,
+            losses: 0,
+            createdAt: new Date().toISOString()
+        };
+
+        users.push(newUser);
+        saveUsers(users);
+
+        // Gera JWT token
+        const token = jwt.sign({ id: newUser.id, username: newUser.username }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.json({
+            success: true,
+            token,
+            user: {
+                id: newUser.id,
+                username: newUser.username,
+                email: newUser.email,
+                wins: newUser.wins,
+                losses: newUser.losses
+            }
+        });
+    } catch (err) {
+        console.error('Erro no signup:', err);
+        res.status(500).json({ error: 'Erro ao criar conta' });
+    }
+});
+
+// Rota de Login
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username e password são obrigatórios' });
+        }
+
+        const users = loadUsers();
+        const user = users.find(u => u.username === username);
+
+        if (!user) {
+            return res.status(401).json({ error: 'Usuário não encontrado' });
+        }
+
+        // Verifica a senha
+        const passwordMatch = await bcryptjs.compare(password, user.password);
+
+        if (!passwordMatch) {
+            return res.status(401).json({ error: 'Senha incorreta' });
+        }
+
+        // Gera JWT token
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+
+        res.json({
+            success: true,
+            token,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                wins: user.wins,
+                losses: user.losses
+            }
+        });
+    } catch (err) {
+        console.error('Erro no login:', err);
+        res.status(500).json({ error: 'Erro ao fazer login' });
+    }
+});
+
+// Middleware para verificar token JWT
+function verifyToken(token) {
+    try {
+        return jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+        return null;
+    }
+}
 
 app.get('/', (req, res) => {
     res.sendFile(htmlPath);
@@ -52,8 +181,24 @@ io.on('connection', (socket) => {
     
     let currentRoom = null;
     let playerColor = null;
+    let currentUser = null;
     
-    socket.on('joinRoom', (roomId) => {
+    socket.on('joinRoom', (roomId, token) => {
+        // Verifica o token
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            socket.emit('authError', 'Token inválido');
+            return;
+        }
+
+        // Busca o usuário
+        const users = loadUsers();
+        currentUser = users.find(u => u.id === decoded.id);
+        if (!currentUser) {
+            socket.emit('authError', 'Usuário não encontrado');
+            return;
+        }
+
         const roomIdStr = String(roomId).toUpperCase();
         
         const existingRoom = io.sockets.adapter.rooms.get(roomIdStr);
@@ -70,16 +215,19 @@ io.on('connection', (socket) => {
         if (playerCount === 0) {
             playerColor = 'white';
             rooms.set(roomIdStr, createGameState());
-            console.log(`Jogador ${socket.id} entrou na sala ${roomIdStr} como Brancas`);
+            console.log(`Jogador ${currentUser.username} (${socket.id}) entrou na sala ${roomIdStr} como Brancas`);
         } else {
             playerColor = 'black';
-            console.log(`Jogador ${socket.id} entrou na sala ${roomIdStr} como Pretas`);
+            console.log(`Jogador ${currentUser.username} (${socket.id}) entrou na sala ${roomIdStr} como Pretas`);
         }
         
-        socket.emit('playerColor', playerColor);
+        socket.emit('playerColor', { color: playerColor, username: currentUser.username });
         socket.emit('gameState', rooms.get(roomIdStr));
         
-        socket.to(roomIdStr).emit('opponentJoined', playerColor);
+        socket.to(roomIdStr).emit('opponentJoined', { 
+            color: playerColor, 
+            username: currentUser.username 
+        });
         
         const updatedRoom = io.sockets.adapter.rooms.get(roomIdStr);
         if (updatedRoom && updatedRoom.size === 2) {
@@ -104,13 +252,27 @@ io.on('connection', (socket) => {
     });
     
     socket.on('updateScore', (scoreData) => {
-        if (!currentRoom) return;
+        if (!currentRoom || !currentUser) return;
         
         const gameState = rooms.get(currentRoom);
         if (!gameState) return;
         
         gameState.whiteWins = scoreData.whiteWins;
         gameState.blackWins = scoreData.blackWins;
+
+        // Atualiza estatísticas do jogador se ele ganhou
+        if (scoreData.winner) {
+            const users = loadUsers();
+            const userIndex = users.findIndex(u => u.id === currentUser.id);
+            if (userIndex !== -1) {
+                if (scoreData.winner === currentUser.username) {
+                    users[userIndex].wins++;
+                } else {
+                    users[userIndex].losses++;
+                }
+                saveUsers(users);
+            }
+        }
         
         socket.to(currentRoom).emit('scoreUpdate', scoreData);
     });
