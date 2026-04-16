@@ -2601,7 +2601,33 @@
                 }, 700);
             }
             
-            playFaustao();
+playFaustao();
+            
+            // Se estiver em partida de torneio, notificar o servidor
+            const tournamentMatch = localStorage.getItem('tournamentMatch');
+            if (tournamentMatch && gameMode === 'online') {
+                try {
+                    const matchData = JSON.parse(tournamentMatch);
+                    
+                    fetch('/api/tournament/match/finish', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        },
+                        body: JSON.stringify({
+                            tournamentId: matchData.tournamentId,
+                            matchId: matchData.matchId,
+                            winnerId: currentUser.id,
+                            winnerName: currentUser.username
+                        })
+                    });
+                    
+                    console.log('Partida de torneio finalizada');
+                } catch (err) {
+                    console.error('Erro ao finalizar partida do torneo:', err);
+                }
+            }
             
             gameActive = false;
         }
@@ -4600,6 +4626,149 @@
         function closeTournaments() {
             const modal = document.getElementById('tournamentsModal');
             modal.classList.remove('active');
+        }
+
+        // ====== SISTEMA DE TORNEIOS ELIMINATÓRIOS ======
+        async function showTournamentDetails(tournamentId) {
+            try {
+                const response = await fetch(`/api/tournament/${tournamentId}/details`);
+                const data = await response.json();
+                
+                if (!data.success) {
+                    alert('Erro ao carregar detalhes do torneo');
+                    return;
+                }
+                
+                const tournament = data.tournament;
+                const tournamentsList = document.getElementById('tournamentsList');
+                
+                // Renderizar bracket do torneo
+                tournamentsList.innerHTML = renderTournamentBracket(tournament);
+            } catch (err) {
+                console.error('Erro ao carregar detalhes do torneo:', err);
+            }
+        }
+
+        function renderTournamentBracket(tournament) {
+            if (tournament.status === 'completed') {
+                return `
+                    <div style="text-align: center; padding: 20px;">
+                        <h2 style="color: #ffd700;">🏆 Vencedor: ${tournament.winner?.username || 'N/A'}</h2>
+                        <p>Torneio Finalizado</p>
+                    </div>
+                `;
+            }
+            
+            if (tournament.status === 'in_progress') {
+                const rounds = [];
+                const maxRound = tournament.totalRounds;
+                
+                for (let r = 1; r <= maxRound; r++) {
+                    const roundMatches = tournament.matches.filter(m => m.round === r);
+                    const roundName = getRoundName(r, maxRound);
+                    
+                    rounds.push(`
+                        <div class="tournament-round">
+                            <h4 style="text-align: center; color: #00ffff; margin: 10px 0;">${roundName}</h4>
+                            ${roundMatches.map(match => renderMatch(match, tournament)).join('')}
+                        </div>
+                    `);
+                }
+                
+                return `
+                    <div style="overflow-x: auto;">
+                        <div style="display: flex; gap: 20px; justify-content: center;">
+                            ${rounds.join('')}
+                        </div>
+                    </div>
+                    <button class="join-tournament-btn" onclick="showTournaments()" style="margin-top: 20px;">← Voltar</button>
+                `;
+            }
+            
+            // Torneio aberto - mostrar info de inscrição
+            return `
+                <div style="text-align: center;">
+                    <p>Inscrições abertas!</p>
+                    <p>Vagas: ${tournament.maxParticipants - (tournament.participants?.length || 0)}/${tournament.maxParticipants}</p>
+                </div>
+            `;
+        }
+
+        function getRoundName(round, totalRounds) {
+            const names = {
+                1: totalRounds === 4 ? 'Oitavas' : totalRounds === 3 ? 'Semifinal' : 'Rodada 1',
+                2: totalRounds === 4 ? 'Quartas' : totalRounds === 3 ? 'Final' : 'Rodada 2',
+                3: totalRounds === 4 ? 'Semifinal' : 'Rodada 3',
+                4: 'Final'
+            };
+            return names[round] || `Rodada ${round}`;
+        }
+
+        function renderMatch(match, tournament) {
+            const isMyMatch = currentUser && (
+                (match.player1?.userId === currentUser.id) || 
+                (match.player2?.userId === currentUser.id)
+            );
+            
+            const statusClass = match.status === 'completed' ? 'match-completed' : 
+                               match.status === 'in_progress' ? 'match-active' : 'match-pending';
+            
+            return `
+                <div class="tournament-match ${statusClass}" style="margin: 10px 0; padding: 10px; border: 1px solid #444; border-radius: 8px; ${isMyMatch ? 'border-color: #00ffff;' : ''}">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>${match.player1?.username || 'Aguardando'}</span>
+                        ${match.winner?.userId === match.player1?.userId ? '<span>✓</span>' : ''}
+                    </div>
+                    <div style="text-align: center; color: #888; font-size: 0.8em;">vs</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>${match.player2?.username || 'Aguardando'}</span>
+                        ${match.winner?.userId === match.player2?.userId ? '<span>✓</span>' : ''}
+                    </div>
+                    ${isMyMatch && match.status !== 'completed' ? `
+                        <button class="join-tournament-btn" onclick="joinTournamentMatch('${tournament.id}', '${match.id}')" style="margin-top: 10px;">
+                            ${match.status === 'in_progress' ? 'Continuar Jogo' : 'Iniciar Jogo'}
+                        </button>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        async function joinTournamentMatch(tournamentId, matchId) {
+            try {
+                const token = localStorage.getItem('token');
+                const response = await fetch('/api/tournament/match/join', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ tournamentId, matchId })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Entra na sala do juego
+                    const roomId = data.roomId;
+                    localStorage.setItem('gameRoomId', roomId);
+                    localStorage.setItem('gameMode', 'online');
+                    localStorage.setItem('gameSession', 'active');
+                    localStorage.setItem('tournamentMatch', JSON.stringify({ tournamentId, matchId }));
+                    
+                    // Reconecta ao socket e entra na sala
+                    if (socket) {
+                        socket.emit('joinRoom', roomId, token);
+                    }
+                    
+                    // Fecha o modal
+                    closeTournaments();
+                } else {
+                    alert('Erro: ' + (data.error || 'Erro desconhecido'));
+                }
+            } catch (err) {
+                alert('Erro ao entrar na partida');
+                console.error(err);
+            }
         }
 
         // ====== SISTEMA DE APOSTAS ======

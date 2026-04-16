@@ -137,10 +137,154 @@ function addParticipantToTournament(tournamentId, userId, username) {
                 status: 'paid'
             });
             saveTournaments(tournaments);
+            
+            // Verifica se o torneo está cheio para iniciar
+            if (tournament.participants.length >= tournament.maxParticipants) {
+                startTournament(tournamentId);
+            }
+            
             return true;
         }
     }
     return false;
+}
+
+// ===== SISTEMA DE TORNEIOS ELIMINATÓRIOS =====
+
+function startTournament(tournamentId) {
+    const tournaments = loadTournaments();
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    
+    if (!tournament) return;
+    
+    tournament.status = 'in_progress';
+    tournament.currentRound = 1;
+    tournament.totalRounds = Math.ceil(Math.log2(tournament.maxParticipants));
+    tournament.matches = [];
+    
+    // Embaralhar participantes
+    const participants = [...tournament.participants].sort(() => Math.random() - 0.5);
+    
+    // Criar primeira rodada (oitavas, quartas, semi, final)
+    const roundMatches = [];
+    for (let i = 0; i < participants.length; i += 2) {
+        const matchId = `MATCH_${tournamentId}_R1_${(i/2)+1}`;
+        roundMatches.push({
+            id: matchId,
+            round: 1,
+            matchNumber: (i/2) + 1,
+            player1: participants[i] ? { userId: participants[i].userId, username: participants[i].username } : null,
+            player2: participants[i+1] ? { userId: participants[i+1].userId, username: participants[i+1].username } : null,
+            winner: null,
+            roomId: `TOURNAMENT_${matchId}`,
+            status: 'pending', // pending, in_progress, completed
+            startTime: null,
+            endTime: null
+        });
+    }
+    
+    tournament.matches = roundMatches;
+    saveTournaments(tournaments);
+    
+    console.log(`[TORNEIO] Torneio ${tournamentId} iniciado com ${participants.length} jogadores | ${roundMatches.length} partidas na Rodada 1`);
+}
+
+function getNextRoundMatches(tournamentId) {
+    const tournaments = loadTournaments();
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    if (!tournament) return [];
+    
+    const currentRound = tournament.currentRound;
+    const currentMatches = tournament.matches.filter(m => m.round === currentRound);
+    const completedMatches = currentMatches.filter(m => m.status === 'completed' && m.winner);
+    
+    if (completedMatches.length !== currentMatches.length) {
+        return []; // Nem todas as partidas foram completadas
+    }
+    
+    // Criar próxima rodada
+    const nextRound = currentRound + 1;
+    const nextMatches = [];
+    
+    for (let i = 0; i < completedMatches.length; i += 2) {
+        if (i + 1 >= completedMatches.length) break;
+        
+        const matchId = `MATCH_${tournamentId}_R${nextRound}_${(i/2)+1}`;
+        nextMatches.push({
+            id: matchId,
+            round: nextRound,
+            matchNumber: (i/2) + 1,
+            player1: { userId: completedMatches[i].winner.userId, username: completedMatches[i].winner.username },
+            player2: { userId: completedMatches[i+1].winner.userId, username: completedMatches[i+1].winner.username },
+            winner: null,
+            roomId: `TOURNAMENT_${matchId}`,
+            status: 'pending',
+            startTime: null,
+            endTime: null
+        });
+    }
+    
+    return nextMatches;
+}
+
+function advanceTournamentRound(tournamentId) {
+    const tournaments = loadTournaments();
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    
+    if (!tournament) return null;
+    
+    const nextMatches = getNextRoundMatches(tournamentId);
+    
+    if (nextMatches.length === 0) {
+        // Verificar se é a última rodada (final)
+        if (tournament.currentRound === tournament.totalRounds) {
+            tournament.status = 'completed';
+            const finalMatch = tournament.matches.find(m => m.round === tournament.currentRound);
+            if (finalMatch && finalMatch.winner) {
+                tournament.winner = finalMatch.winner;
+                console.log(`[TORNEIO] Torneio ${tournamentId} finalizado! Vencedor: ${finalMatch.winner.username}`);
+            }
+        }
+        saveTournaments(tournaments);
+        return null;
+    }
+    
+    tournament.currentRound++;
+    tournament.matches.push(...nextMatches);
+    saveTournaments(tournaments);
+    
+    console.log(`[TORNEIO] Rodada ${tournament.currentRound} iniciada no torneio ${tournamentId} | ${nextMatches.length} partidas`);
+    
+    return nextMatches;
+}
+
+function finishMatch(tournamentId, matchId, winner) {
+    const tournaments = loadTournaments();
+    const tournament = tournaments.find(t => t.id === tournamentId);
+    
+    if (!tournament) return null;
+    
+    const match = tournament.matches.find(m => m.id === matchId);
+    if (!match) return null;
+    
+    match.winner = winner;
+    match.status = 'completed';
+    match.endTime = new Date().toISOString();
+    
+    saveTournaments(tournaments);
+    
+    console.log(`[TORNEIO] Partida ${matchId} finalizada | Vencedor: ${winner.username}`);
+    
+    // Verificar se a rodada foi completada
+    const roundMatches = tournament.matches.filter(m => m.round === tournament.currentRound);
+    const completedInRound = roundMatches.filter(m => m.status === 'completed');
+    
+    if (roundMatches.length === completedInRound.length) {
+        // Avançar para próxima rodada
+        setTimeout(() => advanceTournamentRound(tournamentId), 1000);
+    }
+    
+    return match;
 }
 
 // Funções para sistema de apostas
@@ -892,6 +1036,153 @@ app.get('/api/tournaments', (req, res) => {
     } catch (err) {
         console.error('Erro ao listar torneios:', err);
         res.status(500).json({ error: 'Erro ao listar torneios' });
+    }
+});
+
+// Obter detalhes completos de um torneo (com partidas)
+app.get('/api/tournament/:id/details', (req, res) => {
+    try {
+        const tournaments = loadTournaments();
+        const tournament = tournaments.find(t => t.id === req.params.id);
+
+        if (!tournament) {
+            return res.status(404).json({ error: 'Torneio não encontrado' });
+        }
+
+        res.json({
+            success: true,
+            tournament: {
+                id: tournament.id,
+                name: tournament.name,
+                description: tournament.description,
+                entryFee: tournament.entryFee,
+                maxParticipants: tournament.maxParticipants,
+                participants: tournament.participants || [],
+                status: tournament.status,
+                currentRound: tournament.currentRound || 0,
+                totalRounds: tournament.totalRounds || 0,
+                winner: tournament.winner || null,
+                matches: tournament.matches || [],
+                createdAt: tournament.createdAt
+            }
+        });
+    } catch (err) {
+        console.error('Erro ao obter detalles do torneio:', err);
+        res.status(500).json({ error: 'Erro ao obtener detalles do torneio' });
+    }
+});
+
+// Listar minhas partidas em um torneo
+app.get('/api/tournament/:id/my-matches', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const tournaments = loadTournaments();
+        const tournament = tournaments.find(t => t.id === req.params.id);
+
+        if (!tournament) {
+            return res.status(404).json({ error: 'Torneio não encontrado' });
+        }
+
+        const userMatches = (tournament.matches || []).filter(m => 
+            (m.player1 && m.player1.userId === decoded.id) || 
+            (m.player2 && m.player2.userId === decoded.id)
+        );
+
+        res.json({
+            success: true,
+            matches: userMatches
+        });
+    } catch (err) {
+        console.error('Erro ao obtener partidas do usuário:', err);
+        res.status(500).json({ error: 'Erro ao obtener partidas' });
+    }
+});
+
+// Entrar em uma partida do torneo
+app.post('/api/tournament/match/join', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { tournamentId, matchId } = req.body;
+
+        const tournaments = loadTournaments();
+        const tournament = tournaments.find(t => t.id === tournamentId);
+
+        if (!tournament) {
+            return res.status(404).json({ error: 'Torneio não encontrado' });
+        }
+
+        const match = tournament.matches.find(m => m.id === matchId);
+        if (!match) {
+            return res.status(404).json({ error: 'Partida não encontrada' });
+        }
+
+        // Verificar se o usuário é participante
+        const isPlayer = (match.player1 && match.player1.userId === decoded.id) ||
+                        (match.player2 && match.player2.userId === decoded.id);
+        
+        if (!isPlayer) {
+            return res.status(403).json({ error: 'Você não é participante desta partida' });
+        }
+
+        // Atualizar status da partida
+        if (match.status === 'pending') {
+            match.status = 'in_progress';
+            match.startTime = new Date().toISOString();
+            saveTournaments(tournaments);
+        }
+
+        res.json({
+            success: true,
+            match: match,
+            roomId: match.roomId
+        });
+    } catch (err) {
+        console.error('Erro ao entrar na partida:', err);
+        res.status(500).json({ error: 'Erro ao entrar na partida' });
+    }
+});
+
+// Finalizar uma partida do torneo
+app.post('/api/tournament/match/finish', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { tournamentId, matchId, winnerId, winnerName } = req.body;
+
+        if (!winnerId || !winnerName) {
+            return res.status(400).json({ error: 'Dados incompletos' });
+        }
+
+        const match = finishMatch(tournamentId, matchId, {
+            userId: winnerId,
+            username: winnerName
+        });
+
+        if (!match) {
+            return res.status(400).json({ error: 'Não foi possível finalizar a partida' });
+        }
+
+        res.json({
+            success: true,
+            match: match
+        });
+    } catch (err) {
+        console.error('Erro ao finalizar partida:', err);
+        res.status(500).json({ error: 'Erro ao finalizar partida' });
     }
 });
 
