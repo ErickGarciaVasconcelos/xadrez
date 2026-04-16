@@ -1,6 +1,6 @@
 {
   "name": "xadrez-online",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Jogo de Xadrez Online em Tempo Real",
   "main": "server.js",
   "scripts": {
