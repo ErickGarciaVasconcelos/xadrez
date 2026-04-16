@@ -4886,6 +4886,20 @@ playFaustao();
             const opponentUsername = prompt('Digite o nome de usuário do oponente:');
             if (!opponentUsername) return;
 
+            // Primeiro, verificar se o usuário existe
+            try {
+                const searchResponse = await fetch(`/api/users/search?username=${encodeURIComponent(opponentUsername)}`);
+                const searchData = await searchResponse.json();
+                
+                if (!searchData.success) {
+                    alert('Usuário não encontrado! Verifique o nome e tente novamente.');
+                    return;
+                }
+            } catch (err) {
+                alert('Erro ao buscar usuário');
+                return;
+            }
+
             const amountStr = prompt('Digite o valor da aposta (R$):');
             const amount = parseFloat(amountStr);
             
@@ -4911,7 +4925,7 @@ playFaustao();
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('Aposta criada! Compartilhe com seu oponente.');
+                    alert('Aposta criada! O oponente precisará aceitar para jogar.');
                     showBets(); // Recarrega a lista
                 } else {
                     alert('Erro: ' + (data.error || 'Erro desconhecido'));

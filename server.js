@@ -353,10 +353,38 @@ function verifyToken(token) {
 }
 
 // ===== ROTAS DE API =====
-// Essas rotas precisam vir ANTES de app.use(express.static)
-// para que /api/* seja processado como rota, não como arquivo estático
+ // Essas rotas precisam vir ANTES de app.use(express.static)
+ // para que /api/* seja processado como rota, não como arquivo estático
 
-// Rota para verificar se o token é válido
+ // Rota para buscar usuário por username (para sistema de apostas)
+ app.get('/api/users/search', (req, res) => {
+     try {
+         const { username } = req.query;
+         if (!username) {
+             return res.status(400).json({ error: 'Nome de usuário não fornecido' });
+         }
+         
+         const users = loadUsers();
+         const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+         
+         if (!user) {
+             return res.status(404).json({ error: 'Usuário não encontrado' });
+         }
+         
+         res.json({
+             success: true,
+             user: {
+                 id: user.id,
+                 username: user.username
+             }
+         });
+     } catch (err) {
+         console.error('Erro ao buscar usuário:', err);
+         res.status(500).json({ error: 'Erro ao buscar usuário' });
+     }
+ });
+
+ // Rota para verificar se o token é válido
 app.get('/api/verify-token', (req, res) => {
     try {
         const token = req.headers.authorization?.split(' ')[1] || req.query.token;
@@ -1197,19 +1225,27 @@ app.post('/api/bet/create', (req, res) => {
             return res.status(401).json({ error: 'Não autorizado' });
         }
 
-        const { opponentId, opponentName, amount } = req.body;
+        const { opponentName, amount } = req.body;
         
-        if (!opponentId || !amount || amount <= 0) {
-            return res.status(400).json({ error: 'Dados incompletos' });
+        if (!opponentName || !amount || amount <= 0) {
+            return res.status(400).json({ error: 'Dados incompletos: nome do oponente e valor são obrigatórios' });
         }
 
-        if (decoded.id === opponentId) {
+        // Buscar o opponent pelo nome
+        const users = loadUsers();
+        const opponent = users.find(u => u.username.toLowerCase() === opponentName.toLowerCase());
+        
+        if (!opponent) {
+            return res.status(404).json({ error: 'Usuário oponente não encontrado' });
+        }
+
+        if (decoded.id === opponent.id) {
             return res.status(400).json({ error: 'Você não pode aposta contra si mesmo' });
         }
 
-        const bet = createBet(decoded.id, decoded.username, opponentId, opponentName, amount);
+        const bet = createBet(decoded.id, decoded.username, opponent.id, opponent.username, amount);
         
-        console.log(`[APOSTA] Nova aposta criada: ${bet.id} | ${decoded.username} vs ${opponentName} | R$ ${amount}`);
+        console.log(`[APOSTA] Nova aposta criada: ${bet.id} | ${decoded.username} vs ${opponent.username} | R$ ${amount}`);
         
         res.json({
             success: true,
