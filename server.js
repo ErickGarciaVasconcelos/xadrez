@@ -27,8 +27,7 @@ const betsFilePath = path.resolve(rootDir, 'bets.json');
 const JWT_SECRET = 'your-secret-key-change-in-production';
 const HOUSE_FEE_PERCENTAGE = 0.05; // 5% para a banca
 
-// Armazenamento em memória para apostas ativas
-const activeBets = new Map();
+// Armazenamento em memória para apostas ativas (usará loadBets/saveBets)
 
 // Configuração do Mercado Pago - ADICIONE SUAS CREDENCIAIS AQUI
 const MERCADO_PAGO_TOKEN = process.env.MERCADO_PAGO_TOKEN || 'SEU_ACCESS_TOKEN_AQUI';
@@ -288,20 +287,26 @@ function finishMatch(tournamentId, matchId, winner) {
 }
 
 // Funções para sistema de apostas
+let activeBetsData = [];
+
 function loadBets() {
     try {
         const data = fs.readFileSync(betsFilePath, 'utf-8');
-        return JSON.parse(data).bets || [];
+        activeBetsData = JSON.parse(data).bets || [];
+        return activeBetsData;
     } catch (err) {
+        activeBetsData = [];
         return [];
     }
 }
 
 function saveBets(bets) {
+    activeBetsData = bets;
     fs.writeFileSync(betsFilePath, JSON.stringify({ bets }, null, 2));
 }
 
 function createBet(challengerId, challengerName, opponentId, opponentName, amount) {
+    loadBets(); // Garante que os dados foram carregados
     const betId = 'BET_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const bet = {
         id: betId,
@@ -316,31 +321,34 @@ function createBet(challengerId, challengerName, opponentId, opponentName, amoun
         updatedAt: new Date().toISOString(),
         gameRoomId: null
     };
-    activeBets.set(betId, bet);
+    activeBetsData.push(bet);
+    saveBets(activeBetsData);
     return bet;
 }
 
 function acceptBet(betId, userId) {
-    const bet = activeBets.get(betId);
-    if (!bet) return null;
-    if (bet.opponent.id !== userId) return null;
+    loadBets();
+    const betIndex = activeBetsData.findIndex(b => b.id === betId);
+    if (betIndex === -1) return null;
+    if (activeBetsData[betIndex].opponent.id !== userId) return null;
     
-    bet.status = 'accepted';
-    bet.updatedAt = new Date().toISOString();
-    activeBets.set(betId, bet);
-    return bet;
+    activeBetsData[betIndex].status = 'accepted';
+    activeBetsData[betIndex].updatedAt = new Date().toISOString();
+    saveBets(activeBetsData);
+    return activeBetsData[betIndex];
 }
 
 function cancelBet(betId, userId) {
-    const bet = activeBets.get(betId);
-    if (!bet) return null;
-    if (bet.challenger.id !== userId) return null;
-    if (bet.status !== 'pending') return null;
+    loadBets();
+    const betIndex = activeBetsData.findIndex(b => b.id === betId);
+    if (betIndex === -1) return null;
+    if (activeBetsData[betIndex].challenger.id !== userId) return null;
+    if (activeBetsData[betIndex].status !== 'pending') return null;
     
-    bet.status = 'cancelled';
-    bet.updatedAt = new Date().toISOString();
-    activeBets.set(betId, bet);
-    return bet;
+    activeBetsData[betIndex].status = 'cancelled';
+    activeBetsData[betIndex].updatedAt = new Date().toISOString();
+    saveBets(activeBetsData);
+    return activeBetsData[betIndex];
 }
 
 // Middleware para verificar token JWT
@@ -482,6 +490,10 @@ app.post('/api/create-payment', async (req, res) => {
         };
 
         const fetch = (await import('node-fetch')).default;
+        
+        console.log(`[APOSTA-PAGAMENTO] Chamando API do Mercado Pago...`);
+        console.log(`[APOSTA-PAGAMENTO] Preference:`, JSON.stringify(preference, null, 2));
+        
         const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
             method: 'POST',
             headers: {
@@ -492,936 +504,9 @@ app.post('/api/create-payment', async (req, res) => {
         });
 
         const data = await response.json();
-
-        if (response.ok && data.id) {
-            // Registra o pagamento pendente
-            recordPayment({
-                preferenceId: data.id,
-                userId,
-                username,
-                tournamentId,
-                amount: parsedAmount,
-                houseFee,
-                playerAmount,
-                status: 'pending',
-                paymentMethod: selectedMethod
-            });
-
-            console.log(`[PAGAMENTO] ✓ Preferência criada: ${data.id} | Valor: R$ ${parsedAmount.toFixed(2)} | Banca: R$ ${houseFee.toFixed(2)}`);
-
-            res.json({
-                success: true,
-                preferenceId: data.id,
-                initPoint: data.init_point,
-                amount: parsedAmount,
-                houseFee: houseFee,
-                playerAmount: playerAmount,
-                paymentMethod: selectedMethod
-            });
-        } else {
-            console.error('Erro do Mercado Pago:', data);
-            res.status(500).json({ error: 'Erro ao gerar link de pagamento' });
-        }
-
-    } catch (err) {
-        console.error('Erro ao criar pagamento:', err);
-        res.status(500).json({ error: 'Erro ao processar pagamento' });
-    }
-});
-
-// Webhook para confirmar pagamento
-app.post('/api/webhook-payment', async (req, res) => {
-    try {
-        const { action, data } = req.query;
-
-        // Mercado Pago envia notificações com query params
-        if (action === 'payment.created' || action === 'payment.updated') {
-            const paymentId = data?.id;
-
-            if (!paymentId) {
-                console.log('[WEBHOOK] Notificação recebida sem ID de pagamento');
-                return res.json({ success: true }); // Responde 200 mesmo se dados incompletos
-            }
-
-            console.log(`[WEBHOOK] Notificação Mercado Pago: ID: ${paymentId}, Ação: ${action}`);
-
-            // Aqui você pode fazer verificações adicionais com a API do Mercado Pago
-            // Por enquanto, apenas registra o recebimento
-            const payments = loadPayments();
-            const paymentIndex = payments.findIndex(p => p.mercadoPagoId === paymentId);
-            
-            if (paymentIndex !== -1) {
-                const previousStatus = payments[paymentIndex].status;
-                payments[paymentIndex].status = 'confirmed';
-                payments[paymentIndex].confirmedAt = new Date().toISOString();
-                payments[paymentIndex].mercadoPagoId = paymentId;
-                savePayments(payments);
-                
-                const paymentData = payments[paymentIndex];
-                console.log(`[WEBHOOK] ✓ Pagamento confirmado: ${paymentId} | Usuário: ${paymentData.username} | Método: ${paymentData.paymentMethod.toUpperCase()} | Valor: R$ ${paymentData.amount}`);
-            } else {
-                console.log(`[WEBHOOK] ! Pagamento não encontrado no registro: ${paymentId}`);
-            }
-        }
-
-        res.json({ success: true });
-    } catch (err) {
-        console.error('[WEBHOOK] Erro no webhook:', err);
-        res.json({ success: true }); // Sempre responde 200
-    }
-});
-
-// Rota de sucesso de pagamento
-app.get('/payment-success', (req, res) => {
-    const { tournament, user, preference } = req.query;
-    
-    if (tournament && user) {
-        // Buscar o username do pagamento
-        let username = 'Participante';
-        if (preference) {
-            const payments = loadPayments();
-            const paymentRecord = payments.find(p => p.id === preference);
-            if (paymentRecord) {
-                username = paymentRecord.username || 'Participante';
-            }
-        }
         
-        // Adiciona o participante ao torneio
-        addParticipantToTournament(tournament, user, username);
-        
-        // Atualiza o status do pagamento
-        if (preference) {
-            const payments = loadPayments();
-            const paymentIndex = payments.findIndex(p => p.id === preference);
-            if (paymentIndex !== -1) {
-                payments[paymentIndex].status = 'approved';
-                payments[paymentIndex].confirmedAt = new Date().toISOString();
-                
-                const paymentData = payments[paymentIndex];
-                console.log(`[SUCESSO] Pagamento aprovado: ${preference} | Usuário: ${paymentData.username} | Método: ${paymentData.paymentMethod.toUpperCase()} | Valor: R$ ${paymentData.amount} | Banca: R$ ${paymentData.houseFee}`);
-                
-                savePayments(payments);
-            }
-        }
-        
-        res.send(`
-            <html>
-                <head>
-                    <title>Pagamento Confirmado</title>
-                    <style>
-                        body { 
-                            font-family: Arial; 
-                            background: linear-gradient(135deg, #1a0a2e 0%, #2d0a4e 100%);
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            min-height: 100vh;
-                            color: white;
-                        }
-                        .container {
-                            text-align: center;
-                            background: rgba(255,255,255,0.1);
-                            padding: 40px;
-                            border-radius: 20px;
-                        }
-                        h1 { color: #00ffff; }
-                        .icon { font-size: 60px; margin: 20px 0; }
-                        a { 
-                            display: inline-block;
-                            margin-top: 20px;
-                            padding: 10px 30px;
-                            background: linear-gradient(135deg, #00ffff 0%, #8800ff 100%);
-                            color: black;
-                            text-decoration: none;
-                            border-radius: 8px;
-                            font-weight: bold;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <div class="icon">✅</div>
-                        <h1>Pagamento Confirmado!</h1>
-                        <p>Sua entrada no torneio foi autorizada com sucesso.</p>
-                        <p>Você já está registrado para participar!</p>
-                        <a href="/">Voltar ao Jogo</a>
-                    </div>
-                </body>
-            </html>
-        `);
-    } else {
-        res.redirect('/');
-    }
-});
-
-app.get('/payment-failure', (req, res) => {
-    res.send(`
-        <html>
-            <head>
-                <title>Pagamento Recusado</title>
-                <style>
-                    body { 
-                        font-family: Arial; 
-                        background: linear-gradient(135deg, #1a0a2e 0%, #2d0a4e 100%);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        min-height: 100vh;
-                        color: white;
-                    }
-                    .container {
-                        text-align: center;
-                        background: rgba(255,255,255,0.1);
-                        padding: 40px;
-                        border-radius: 20px;
-                    }
-                    h1 { color: #ff6666; }
-                    .icon { font-size: 60px; margin: 20px 0; }
-                    a { 
-                        display: inline-block;
-                        margin-top: 20px;
-                        padding: 10px 30px;
-                        background: linear-gradient(135deg, #00ffff 0%, #8800ff 100%);
-                        color: black;
-                        text-decoration: none;
-                        border-radius: 8px;
-                        font-weight: bold;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="icon">❌</div>
-                    <h1>Pagamento Recusado</h1>
-                    <p>Ocorreu um problema ao processar seu pagamento.</p>
-                    <p>Verifique seus dados e tente novamente.</p>
-                    <a href="/">Tentar Novamente</a>
-                </div>
-            </body>
-        </html>
-    `);
-});
-
-app.get('/payment-pending', (req, res) => {
-    res.send(`
-        <html>
-            <head>
-                <title>Pagamento Pendente</title>
-                <style>
-                    body { 
-                        font-family: Arial; 
-                        background: linear-gradient(135deg, #1a0a2e 0%, #2d0a4e 100%);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        min-height: 100vh;
-                        color: white;
-                    }
-                    .container {
-                        text-align: center;
-                        background: rgba(255,255,255,0.1);
-                        padding: 40px;
-                        border-radius: 20px;
-                    }
-                    h1 { color: #ffaa00; }
-                    .icon { font-size: 60px; margin: 20px 0; }
-                    a { 
-                        display: inline-block;
-                        margin-top: 20px;
-                        padding: 10px 30px;
-                        background: linear-gradient(135deg, #00ffff 0%, #8800ff 100%);
-                        color: black;
-                        text-decoration: none;
-                        border-radius: 8px;
-                        font-weight: bold;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="icon">⏳</div>
-                    <h1>Pagamento Pendente</h1>
-                    <p>Seu pagamento está sendo processado.</p>
-                    <p>Você receberá uma confirmação em breve.</p>
-                    <a href="/">Voltar</a>
-                </div>
-            </body>
-        </html>
-    `);
-});
-
-// ===== PÁGINAS DE RESULTADO DE APOSTAS =====
-
-app.get('/bet-success', (req, res) => {
-    const { bet } = req.query;
-    const betData = bet ? activeBets.get(bet) : null;
-    
-    res.send(`
-        <html>
-            <head>
-                <title>Pagamento Confirmado - Aposta</title>
-                <style>
-                    body { 
-                        font-family: Arial; 
-                        background: linear-gradient(135deg, #0a2e1a 0%, #1a4a2e 100%);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        min-height: 100vh;
-                        color: white;
-                    }
-                    .container {
-                        text-align: center;
-                        background: rgba(255,255,255,0.1);
-                        padding: 40px;
-                        border-radius: 20px;
-                        max-width: 500px;
-                    }
-                    h1 { color: #00ff88; }
-                    .icon { font-size: 60px; margin: 20px 0; }
-                    .bet-info {
-                        background: rgba(0,0,0,0.3);
-                        padding: 20px;
-                        border-radius: 10px;
-                        margin: 20px 0;
-                        text-align: left;
-                    }
-                    .bet-info p { margin: 10px 0; }
-                    .highlight { color: #00ff88; font-weight: bold; }
-                    a { 
-                        display: inline-block;
-                        margin-top: 20px;
-                        padding: 12px 30px;
-                        background: linear-gradient(135deg, #00ff88 0%, #00aa55 100%);
-                        color: black;
-                        text-decoration: none;
-                        border-radius: 8px;
-                        font-weight: bold;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="icon">🎮</div>
-                    <h1>Pagamento Confirmado!</h1>
-                    <p>Sua aposta está pronta.</p>
-                    ${betData ? `
-                    <div class="bet-info">
-                        <p><strong>Desafiante:</strong> ${betData.challenger.name}</p>
-                        <p><strong>Oponente:</strong> ${betData.opponent.name}</p>
-                        <p><strong>Valor:</strong> <span class="highlight">R$ ${betData.amount.toFixed(2)}</span></p>
-                        <p><strong>Prêmio:</strong> <span class="highlight">R$ ${betData.prizeAmount.toFixed(2)}</span></p>
-                    </div>
-                    <a href="/">Ir para o Jogo</a>
-                    ` : '<a href="/">Voltar ao Início</a>'}
-                </div>
-            </body>
-        </html>
-    `);
-});
-
-app.get('/bet-failure', (req, res) => {
-    res.send(`
-        <html>
-            <head>
-                <title>Pagamento Recusado - Aposta</title>
-                <style>
-                    body { 
-                        font-family: Arial; 
-                        background: linear-gradient(135deg, #2e0a0a 0%, #4a1a1a 100%);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        min-height: 100vh;
-                        color: white;
-                    }
-                    .container {
-                        text-align: center;
-                        background: rgba(255,255,255,0.1);
-                        padding: 40px;
-                        border-radius: 20px;
-                    }
-                    h1 { color: #ff4444; }
-                    .icon { font-size: 60px; margin: 20px 0; }
-                    a { 
-                        display: inline-block;
-                        margin-top: 20px;
-                        padding: 10px 30px;
-                        background: linear-gradient(135deg, #ff4444 0%, #aa2222 100%);
-                        color: white;
-                        text-decoration: none;
-                        border-radius: 8px;
-                        font-weight: bold;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="icon">❌</div>
-                    <h1>Pagamento Recusado</h1>
-                    <p>Ocorreu um problema ao processar o pagamento da sua aposta.</p>
-                    <a href="/">Tentar Novamente</a>
-                </div>
-            </body>
-        </html>
-    `);
-});
-
-app.get('/bet-pending', (req, res) => {
-    res.send(`
-        <html>
-            <head>
-                <title>Pagamento Pendente - Aposta</title>
-                <style>
-                    body { 
-                        font-family: Arial; 
-                        background: linear-gradient(135deg, #2e2e0a 0%, #4a4a1a 100%);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        min-height: 100vh;
-                        color: white;
-                    }
-                    .container {
-                        text-align: center;
-                        background: rgba(255,255,255,0.1);
-                        padding: 40px;
-                        border-radius: 20px;
-                    }
-                    h1 { color: #ffaa00; }
-                    .icon { font-size: 60px; margin: 20px 0; }
-                    a { 
-                        display: inline-block;
-                        margin-top: 20px;
-                        padding: 10px 30px;
-                        background: linear-gradient(135deg, #ffaa00 0%, #aa7700 100%);
-                        color: black;
-                        text-decoration: none;
-                        border-radius: 8px;
-                        font-weight: bold;
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <div class="icon">⏳</div>
-                    <h1>Pagamento Pendente</h1>
-                    <p>Seu pagamento está sendo processado.</p>
-                    <p>Você receberá uma confirmação em breve.</p>
-                    <a href="/">Voltar</a>
-                </div>
-            </body>
-        </html>
-    `);
-});
-
-// ===== ROTAS DE TORNEIOS =====
-
-// Rota para obter relatório de pagamentos e taxa da banca
-app.get('/api/payments-report', (req, res) => {
-    try {
-        const payments = loadPayments();
-        
-        const stats = {
-            totalPayments: payments.length,
-            approvedPayments: payments.filter(p => p.status === 'approved').length,
-            pendingPayments: payments.filter(p => p.status === 'pending').length,
-            totalAmount: 0,
-            totalHouseFee: 0,
-            totalPlayerAmount: 0,
-            paymentsByStatus: {},
-            paymentsByMethod: {
-                pix: 0,
-                card: 0,
-                unknown: 0
-            },
-            amountByMethod: {
-                pix: 0,
-                card: 0,
-                unknown: 0
-            },
-            houseFeeByMethod: {
-                pix: 0,
-                card: 0,
-                unknown: 0
-            }
-        };
-
-        payments.forEach(payment => {
-            // Calcula totais gerais
-            if (payment.status === 'approved') {
-                stats.totalAmount += payment.amount;
-                stats.totalHouseFee += payment.houseFee;
-                stats.totalPlayerAmount += payment.playerAmount;
-            }
-
-            // Conta por método de pagamento
-            const method = payment.paymentMethod || 'unknown';
-            if (method === 'pix' || method === 'card') {
-                stats.paymentsByMethod[method]++;
-                if (payment.status === 'approved') {
-                    stats.amountByMethod[method] += payment.amount;
-                    stats.houseFeeByMethod[method] += payment.houseFee;
-                }
-            } else {
-                stats.paymentsByMethod['unknown']++;
-                if (payment.status === 'approved') {
-                    stats.amountByMethod['unknown'] += payment.amount;
-                    stats.houseFeeByMethod['unknown'] += payment.houseFee;
-                }
-            }
-        });
-
-        // Agrupa por status
-        payments.forEach(payment => {
-            const status = payment.status;
-            if (!stats.paymentsByStatus[status]) {
-                stats.paymentsByStatus[status] = 0;
-            }
-            stats.paymentsByStatus[status]++;
-        });
-
-        // Formata os valores monetários
-        const formattedStats = {
-            ...stats,
-            totalAmount: parseFloat(stats.totalAmount.toFixed(2)),
-            totalHouseFee: parseFloat(stats.totalHouseFee.toFixed(2)),
-            totalPlayerAmount: parseFloat(stats.totalPlayerAmount.toFixed(2)),
-            amountByMethod: {
-                pix: parseFloat(stats.amountByMethod.pix.toFixed(2)),
-                card: parseFloat(stats.amountByMethod.card.toFixed(2)),
-                unknown: parseFloat(stats.amountByMethod.unknown.toFixed(2))
-            },
-            houseFeeByMethod: {
-                pix: parseFloat(stats.houseFeeByMethod.pix.toFixed(2)),
-                card: parseFloat(stats.houseFeeByMethod.card.toFixed(2)),
-                unknown: parseFloat(stats.houseFeeByMethod.unknown.toFixed(2))
-            }
-        };
-
-        console.log(`[RELATÓRIO] Total de pagamentos: ${formattedStats.totalPayments} | Aprovados: ${formattedStats.approvedPayments} | PIX: ${formattedStats.paymentsByMethod.pix} | Cartão: ${formattedStats.paymentsByMethod.card} | Banca: R$ ${formattedStats.totalHouseFee}`);
-
-        res.json({
-            success: true,
-            stats: formattedStats,
-            recentPayments: payments.slice(-10).reverse()
-        });
-    } catch (err) {
-        console.error('[RELATÓRIO] Erro ao obter relatório:', err);
-        res.status(500).json({ error: 'Erro ao obter relatório' });
-    }
-});
-
-app.get('/api/tournament/:id', (req, res) => {
-    try {
-        const tournaments = loadTournaments();
-        const tournament = tournaments.find(t => t.id === req.params.id);
-
-        if (!tournament) {
-            return res.status(404).json({ error: 'Torneio não encontrado' });
-        }
-
-        res.json({
-            success: true,
-            tournament: {
-                id: tournament.id,
-                name: tournament.name,
-                description: tournament.description,
-                entryFee: tournament.entryFee,
-                maxParticipants: tournament.maxParticipants,
-                participants: (tournament.participants || []).length,
-                status: tournament.status,
-                createdAt: tournament.createdAt
-            }
-        });
-    } catch (err) {
-        console.error('Erro ao obter torneio:', err);
-        res.status(500).json({ error: 'Erro ao obter torneio' });
-    }
-});
-
-// Rota para listar torneios disponíveis
-app.get('/api/tournaments', (req, res) => {
-    try {
-        const tournaments = loadTournaments();
-
-        const availableTournaments = tournaments
-            .filter(t => t.status === 'open')
-            .map(t => ({
-                id: t.id,
-                name: t.name,
-                description: t.description,
-                entryFee: t.entryFee,
-                maxParticipants: t.maxParticipants,
-                participants: (t.participants || []).length,
-                spotsAvailable: t.maxParticipants - (t.participants || []).length
-            }));
-
-        res.json({
-            success: true,
-            tournaments: availableTournaments
-        });
-    } catch (err) {
-        console.error('Erro ao listar torneios:', err);
-        res.status(500).json({ error: 'Erro ao listar torneios' });
-    }
-});
-
-// Obter detalhes completos de um torneo (com partidas)
-app.get('/api/tournament/:id/details', (req, res) => {
-    try {
-        const tournaments = loadTournaments();
-        const tournament = tournaments.find(t => t.id === req.params.id);
-
-        if (!tournament) {
-            return res.status(404).json({ error: 'Torneio não encontrado' });
-        }
-
-        res.json({
-            success: true,
-            tournament: {
-                id: tournament.id,
-                name: tournament.name,
-                description: tournament.description,
-                entryFee: tournament.entryFee,
-                maxParticipants: tournament.maxParticipants,
-                participants: tournament.participants || [],
-                status: tournament.status,
-                currentRound: tournament.currentRound || 0,
-                totalRounds: tournament.totalRounds || 0,
-                winner: tournament.winner || null,
-                matches: tournament.matches || [],
-                createdAt: tournament.createdAt
-            }
-        });
-    } catch (err) {
-        console.error('Erro ao obter detalles do torneio:', err);
-        res.status(500).json({ error: 'Erro ao obtener detalles do torneio' });
-    }
-});
-
-// Listar minhas partidas em um torneo
-app.get('/api/tournament/:id/my-matches', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const tournaments = loadTournaments();
-        const tournament = tournaments.find(t => t.id === req.params.id);
-
-        if (!tournament) {
-            return res.status(404).json({ error: 'Torneio não encontrado' });
-        }
-
-        const userMatches = (tournament.matches || []).filter(m => 
-            (m.player1 && m.player1.userId === decoded.id) || 
-            (m.player2 && m.player2.userId === decoded.id)
-        );
-
-        res.json({
-            success: true,
-            matches: userMatches
-        });
-    } catch (err) {
-        console.error('Erro ao obtener partidas do usuário:', err);
-        res.status(500).json({ error: 'Erro ao obtener partidas' });
-    }
-});
-
-// Entrar em uma partida do torneo
-app.post('/api/tournament/match/join', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { tournamentId, matchId } = req.body;
-
-        const tournaments = loadTournaments();
-        const tournament = tournaments.find(t => t.id === tournamentId);
-
-        if (!tournament) {
-            return res.status(404).json({ error: 'Torneio não encontrado' });
-        }
-
-        const match = tournament.matches.find(m => m.id === matchId);
-        if (!match) {
-            return res.status(404).json({ error: 'Partida não encontrada' });
-        }
-
-        // Verificar se o usuário é participante
-        const isPlayer = (match.player1 && match.player1.userId === decoded.id) ||
-                        (match.player2 && match.player2.userId === decoded.id);
-        
-        if (!isPlayer) {
-            return res.status(403).json({ error: 'Você não é participante desta partida' });
-        }
-
-        // Atualizar status da partida
-        if (match.status === 'pending') {
-            match.status = 'in_progress';
-            match.startTime = new Date().toISOString();
-            saveTournaments(tournaments);
-        }
-
-        res.json({
-            success: true,
-            match: match,
-            roomId: match.roomId
-        });
-    } catch (err) {
-        console.error('Erro ao entrar na partida:', err);
-        res.status(500).json({ error: 'Erro ao entrar na partida' });
-    }
-});
-
-// Finalizar uma partida do torneo
-app.post('/api/tournament/match/finish', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { tournamentId, matchId, winnerId, winnerName } = req.body;
-
-        if (!winnerId || !winnerName) {
-            return res.status(400).json({ error: 'Dados incompletos' });
-        }
-
-        const match = finishMatch(tournamentId, matchId, {
-            userId: winnerId,
-            username: winnerName
-        });
-
-        if (!match) {
-            return res.status(400).json({ error: 'Não foi possível finalizar a partida' });
-        }
-
-        res.json({
-            success: true,
-            match: match
-        });
-    } catch (err) {
-        console.error('Erro ao finalizar partida:', err);
-        res.status(500).json({ error: 'Erro ao finalizar partida' });
-    }
-});
-
-// ===== SISTEMA DE APOSTAS =====
-
-// Criar uma aposta contra um oponente
-app.post('/api/bet/create', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { opponentName, amount } = req.body;
-        
-        if (!opponentName || !amount || amount <= 0) {
-            return res.status(400).json({ error: 'Dados incompletos: nome do oponente e valor são obrigatórios' });
-        }
-
-        // Buscar o opponent pelo nome
-        const users = loadUsers();
-        const opponent = users.find(u => u.username.toLowerCase() === opponentName.toLowerCase());
-        
-        if (!opponent) {
-            return res.status(404).json({ error: 'Usuário oponente não encontrado' });
-        }
-
-        if (decoded.id === opponent.id) {
-            return res.status(400).json({ error: 'Você não pode aposta contra si mesmo' });
-        }
-
-        const bet = createBet(decoded.id, decoded.username, opponent.id, opponent.username, amount);
-        
-        console.log(`[APOSTA] Nova aposta criada: ${bet.id} | ${decoded.username} vs ${opponent.username} | R$ ${amount}`);
-        
-        res.json({
-            success: true,
-            bet: bet
-        });
-    } catch (err) {
-        console.error('Erro ao criar aposta:', err);
-        res.status(500).json({ error: 'Erro ao criar aposta' });
-    }
-});
-
-// Listar apostas do usuário
-app.get('/api/bets/my-bets', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const userBets = [];
-        activeBets.forEach((bet, betId) => {
-            if (bet.challenger.id === decoded.id || bet.opponent.id === decoded.id) {
-                userBets.push({
-                    id: betId,
-                    challenger: bet.challenger,
-                    opponent: bet.opponent,
-                    amount: bet.amount,
-                    houseFee: bet.houseFee,
-                    status: bet.status,
-                    createdAt: bet.createdAt
-                });
-            }
-        });
-
-        res.json({
-            success: true,
-            bets: userBets
-        });
-    } catch (err) {
-        console.error('Erro ao listar apostas:', err);
-        res.status(500).json({ error: 'Erro ao listar apostas' });
-    }
-});
-
-// Aceitar uma aposta
-app.post('/api/bet/accept', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { betId } = req.body;
-        const bet = acceptBet(betId, decoded.id);
-        
-        if (!bet) {
-            return res.status(404).json({ error: 'Aposta não encontrada ou já aceita' });
-        }
-
-        console.log(`[APOSTA] Aposta aceita: ${betId} | ${decoded.username}`);
-
-        // Notifica via Socket.IO se os jogadores estiverem conectados
-        io.emit('betAccepted', bet);
-
-        res.json({
-            success: true,
-            bet: bet
-        });
-    } catch (err) {
-        console.error('Erro ao aceitar aposta:', err);
-        res.status(500).json({ error: 'Erro ao aceitar aposta' });
-    }
-});
-
-// Cancelar uma aposta (apenas criador)
-app.post('/api/bet/cancel', (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { betId } = req.body;
-        const bet = cancelBet(betId, decoded.id);
-        
-        if (!bet) {
-            return res.status(404).json({ error: 'Aposta não encontrada ou já aceita' });
-        }
-
-        console.log(`[APOSTA] Aposta cancelada: ${betId}`);
-
-        res.json({
-            success: true,
-            bet: bet
-        });
-    } catch (err) {
-        console.error('Erro ao cancelar aposta:', err);
-        res.status(500).json({ error: 'Erro ao cancelar aposta' });
-    }
-});
-
-// Criar pagamento para aposta
-app.post('/api/bet/create-payment', async (req, res) => {
-    try {
-        const token = req.headers.authorization?.split(' ')[1];
-        const decoded = verifyToken(token);
-        if (!decoded) {
-            return res.status(401).json({ error: 'Não autorizado' });
-        }
-
-        const { betId, paymentMethod } = req.body;
-        const bet = activeBets.get(betId);
-        
-        if (!bet) {
-            return res.status(404).json({ error: 'Aposta não encontrada' });
-        }
-
-        if (bet.status !== 'accepted') {
-            return res.status(400).json({ error: 'Aposta precisa estar aceita primeiro' });
-        }
-
-        if (!MERCADO_PAGO_TOKEN || MERCADO_PAGO_TOKEN === 'SEU_ACCESS_TOKEN_AQUI') {
-            return res.status(500).json({ 
-                error: 'Mercado Pago não configurado. Configure MERCADO_PAGO_TOKEN em .env' 
-            });
-        }
-
-        const validPaymentMethods = ['pix', 'card'];
-        const selectedMethod = validPaymentMethods.includes(paymentMethod) ? paymentMethod : 'pix';
-
-        console.log(`[APOSTA-PAGAMENTO] Pagamento solicitado: ${betId} | ${decoded.username} | Método: ${selectedMethod}`);
-
-        const preference = {
-            items: [
-                {
-                    id: betId,
-                    title: `Aposta de Xadrez: ${bet.challenger.name} vs ${bet.opponent.name}`,
-                    description: `Valor: R$ ${bet.amount.toFixed(2)} | Método: ${selectedMethod === 'pix' ? 'PIX' : 'Cartão'}`,
-                    quantity: 1,
-                    unit_price: bet.amount
-                }
-            ],
-            payer: {
-                email: 'bet@xadrez-online.com'
-            },
-            back_urls: {
-                success: `${process.env.BASE_URL || 'http://localhost:3000'}/bet-success?bet=${betId}`,
-                failure: `${process.env.BASE_URL || 'http://localhost:3000'}/bet-failure`,
-                pending: `${process.env.BASE_URL || 'http://localhost:3000'}/bet-pending`
-            },
-            notification_url: `${process.env.BASE_URL || 'http://localhost:3000'}/api/webhook-bet-payment`,
-            metadata: {
-                betId: betId,
-                paymentType: 'bet',
-                paymentMethod: selectedMethod,
-                userId: decoded.id,
-                username: decoded.username,
-                amount: bet.amount,
-                houseFee: bet.houseFee
-            }
-        };
-
-        const fetch = (await import('node-fetch')).default;
-        const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${MERCADO_PAGO_TOKEN}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(preference)
-        });
-
-        const data = await response.json();
+        console.log(`[APOSTA-PAGAMENTO] Resposta do Mercado Pago - Status: ${response.status}`);
+        console.log(`[APOSTA-PAGAMENTO] Resposta do Mercado Pago - Data:`, JSON.stringify(data, null, 2));
 
         if (response.ok && data.id) {
             // Registra o pagamento
@@ -1448,13 +533,14 @@ app.post('/api/bet/create-payment', async (req, res) => {
                 amount: bet.amount
             });
         } else {
-            console.error('Erro do Mercado Pago:', data);
-            res.status(500).json({ error: 'Erro ao gerar link de pagamento' });
+            console.error('[APOSTA-PAGAMENTO] Erro do Mercado Pago - Status:', response.status);
+            console.error('[APOSTA-PAGAMENTO] Erro do Mercado Pago - Resposta:', JSON.stringify(data, null, 2));
+            res.status(500).json({ error: 'Erro ao gerar link de pagamento: ' + (data.message || 'Mercado Pago retornou erro') });
         }
 
     } catch (err) {
-        console.error('Erro ao criar pagamento de aposta:', err);
-        res.status(500).json({ error: 'Erro ao processar pagamento' });
+        console.error('[APOSTA-PAGAMENTO] Erro ao criar pagamento de aposta:', err);
+        res.status(500).json({ error: 'Erro ao processar pagamento: ' + err.message });
     }
 });
 
@@ -1482,16 +568,17 @@ app.post('/api/webhook-bet-payment', async (req, res) => {
                 saveBets(allBets);
 
                 // Atualiza o status da aposta
-                const bet = activeBets.get(paymentRecord.betId);
-                if (bet) {
-                    bet.status = 'in_progress';
-                    bet.updatedAt = new Date().toISOString();
-                    activeBets.set(paymentRecord.betId, bet);
+                loadBets();
+                const betIndex = activeBetsData.findIndex(b => b.id === paymentRecord.betId);
+                if (betIndex !== -1) {
+                    activeBetsData[betIndex].status = 'in_progress';
+                    activeBetsData[betIndex].updatedAt = new Date().toISOString();
+                    saveBets(activeBetsData);
                     
-                    console.log(`[APOSTA] ✓ Aposta em andamento: ${paymentRecord.betId} | Valor: R$ ${bet.amount}`);
+                    console.log(`[APOSTA] ✓ Aposta em andamento: ${paymentRecord.betId} | Valor: R$ ${activeBetsData[betIndex].amount}`);
                     
                     // Notifica via Socket.IO
-                    io.emit('betInProgress', bet);
+                    io.emit('betInProgress', activeBetsData[betIndex]);
                 }
             }
         }
@@ -1513,12 +600,15 @@ app.post('/api/bet/start-game', (req, res) => {
         }
 
         const { betId } = req.body;
-        const bet = activeBets.get(betId);
+        loadBets();
+        const betIndex = activeBetsData.findIndex(b => b.id === betId);
         
-        if (!bet) {
+        if (betIndex === -1) {
             return res.status(404).json({ error: 'Aposta não encontrada' });
         }
 
+        const bet = activeBetsData[betIndex];
+        
         if (bet.status !== 'in_progress') {
             return res.status(400).json({ error: 'Aposta precisa estar em andamento' });
         }
@@ -1529,15 +619,15 @@ app.post('/api/bet/start-game', (req, res) => {
 
         // Gera uma sala única para a aposta
         const roomId = 'BET_' + betId;
-        bet.gameRoomId = roomId;
-        activeBets.set(betId, bet);
+        activeBetsData[betIndex].gameRoomId = roomId;
+        saveBets(activeBetsData);
 
         console.log(`[APOSTA] Partida iniciada: ${betId} | Sala: ${roomId}`);
 
         res.json({
             success: true,
             roomId: roomId,
-            bet: bet
+            bet: activeBetsData[betIndex]
         });
     } catch (err) {
         console.error('Erro ao iniciar partida:', err);
@@ -1549,12 +639,16 @@ app.post('/api/bet/start-game', (req, res) => {
 app.post('/api/bet/complete', (req, res) => {
     try {
         const { betId, winnerId } = req.body;
-        const bet = activeBets.get(betId);
         
-        if (!bet) {
+        loadBets();
+        const betIndex = activeBetsData.findIndex(b => b.id === betId);
+        
+        if (betIndex === -1) {
             return res.status(404).json({ error: 'Aposta não encontrada' });
         }
 
+        const bet = activeBetsData[betIndex];
+        
         bet.status = 'completed';
         bet.winner = winnerId;
         bet.completedAt = new Date().toISOString();
@@ -1562,9 +656,9 @@ app.post('/api/bet/complete', (req, res) => {
         
         // Salva no histórico
         const allBets = loadBets();
-        const betIndex = allBets.findIndex(b => b.betId === betId);
-        if (betIndex !== -1) {
-            allBets[betIndex] = { ...allBets[betIndex], ...bet };
+        const historyIndex = allBets.findIndex(b => b.betId === betId);
+        if (historyIndex !== -1) {
+            allBets[historyIndex] = { ...allBets[historyIndex], ...bet };
         } else {
             allBets.push(bet);
         }
@@ -1847,8 +941,9 @@ io.on('connection', (socket) => {
             socket.emit('authError', 'Token inválido');
             return;
         }
-
-        const bet = activeBets.get(betId);
+loadBets();
+        const bet = activeBetsData.find(b => b.id === betId);
+        
         if (!bet) {
             socket.emit('betError', 'Aposta não encontrada');
             return;
@@ -1877,8 +972,11 @@ io.on('connection', (socket) => {
         socket.join(roomId);
 
         // Atualiza a sala na aposta
-        bet.gameRoomId = roomId;
-        activeBets.set(betId, bet);
+        const betUpdateIndex = activeBetsData.findIndex(b => b.id === betId);
+        if (betUpdateIndex !== -1) {
+            activeBetsData[betUpdateIndex].gameRoomId = roomId;
+            saveBets(activeBetsData);
+        }
 
         console.log(`[BET-SOCKET] Jogador ${decoded.username} entrou na sala ${roomId}`);
 
@@ -1908,17 +1006,19 @@ io.on('connection', (socket) => {
         if (!currentRoom || !currentUser) return;
         
         const { betId, winner } = data;
-        const bet = activeBets.get(betId);
         
-        if (bet && bet.status === 'in_progress') {
-            bet.status = 'completed';
-            bet.winner = winner;
-            bet.completedAt = new Date().toISOString();
-            activeBets.set(betId, bet);
+        loadBets();
+        const betIndex = activeBetsData.findIndex(b => b.id === betId);
+        
+        if (betIndex !== -1 && activeBetsData[betIndex].status === 'in_progress') {
+            activeBetsData[betIndex].status = 'completed';
+            activeBetsData[betIndex].winner = winner;
+            activeBetsData[betIndex].completedAt = new Date().toISOString();
+            saveBets(activeBetsData);
 
             // Salva no histórico
             const allBets = loadBets();
-            allBets.push({ ...bet, status: 'completed' });
+            allBets.push({ ...activeBetsData[betIndex], status: 'completed' });
             saveBets(allBets);
 
             io.to(currentRoom).emit('betGameFinished', {

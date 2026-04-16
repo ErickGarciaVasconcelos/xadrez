@@ -5014,6 +5014,8 @@ playFaustao();
             
             try {
                 const token = localStorage.getItem('authToken');
+                console.log('[PAY BET] Iniciando pagamento da aposta:', betId, 'Método:', method);
+                
                 const response = await fetch('/api/bet/create-payment', {
                     method: 'POST',
                     headers: {
@@ -5026,15 +5028,19 @@ playFaustao();
                     })
                 });
 
+                console.log('[PAY BET] Status da resposta:', response.status);
                 const data = await response.json();
+                console.log('[PAY BET] Dados retornados:', data);
                 
                 if (data.success && data.initPoint) {
                     // Redireciona para o pagamento
                     window.location.href = data.initPoint;
                 } else {
+                    console.error('[PAY BET] Erro na resposta:', data);
                     alert('Erro: ' + (data.error || 'Erro ao gerar pagamento'));
                 }
             } catch (err) {
+                console.error('[PAY BET] Erro na requisição:', err);
                 alert('Erro ao processar pagamento');
                 console.error(err);
             }
