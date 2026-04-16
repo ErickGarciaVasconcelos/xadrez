@@ -1,0 +1,34 @@
+{
+  "tournaments": [
+    {
+      "id": "TORNEIO001",
+      "name": "Torneio de Xadrez - Iniciante",
+      "description": "Competição para jogadores iniciantes",
+      "entryFee": 10.00,
+      "maxParticipants": 16,
+      "status": "open",
+      "createdAt": "2026-04-15T00:00:00.000Z",
+      "participants": []
+    },
+    {
+      "id": "TORNEIO002",
+      "name": "Torneio de Xadrez - Intermediário",
+      "description": "Competição para jogadores intermediários",
+      "entryFee": 25.00,
+      "maxParticipants": 8,
+      "status": "open",
+      "createdAt": "2026-04-15T00:00:00.000Z",
+      "participants": []
+    },
+    {
+      "id": "TORNEIO003",
+      "name": "Torneio de Xadrez - Avançado",
+      "description": "Competição para jogadores avançados",
+      "entryFee": 50.00,
+      "maxParticipants": 4,
+      "status": "open",
+      "createdAt": "2026-04-15T00:00:00.000Z",
+      "participants": []
+    }
+  ]
+}
