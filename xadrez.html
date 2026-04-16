@@ -4794,20 +4794,41 @@ playFaustao();
 
             try {
                 const token = localStorage.getItem('token');
+                console.log('Token from localStorage:', token ? token.substring(0, 20) + '...' : null);
+                
+                if (!token) {
+                    betsList.innerHTML = '<div class="loading">Token não encontrado. Faça login novamente.</div>';
+                    return;
+                }
+
+                console.log('Fetching /api/bets/my-bets...');
                 const response = await fetch('/api/bets/my-bets', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
                 const data = await response.json();
+                console.log('Response data:', data);
+
+                if (response.status === 401) {
+                    betsList.innerHTML = '<div class="loading">Sessão expirada. Faça login novamente.</div>';
+                    return;
+                }
 
                 if (data.success) {
                     activeBetsList = data.bets || [];
                     renderBetsList();
                 } else {
-                    betsList.innerHTML = '<div class="loading">Erro ao carregar apostas</div>';
+                    betsList.innerHTML = '<div class="loading">Erro ao carregar apostas: ' + (data.error || '') + '</div>';
                 }
             } catch (err) {
                 console.error('Erro ao carregar apostas:', err);
-                betsList.innerHTML = '<div class="loading" style="color: #ff6666;">Erro ao carregar apostas</div>';
+                betsList.innerHTML = '<div class="loading" style="color: #ff6666;">Erro ao carregar apostas: ' + err.message + '</div>';
             }
         }
 
