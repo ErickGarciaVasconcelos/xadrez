@@ -1952,6 +1952,47 @@
         </div>
     </div>
 
+    <!-- Modal de Valor da Aposta -->
+    <div class="tournaments-modal" id="betAmountModal">
+        <div class="tournaments-content" style="max-width: 420px;">
+            <div class="tournaments-header">
+                <h2>🎯 Valor da Aposta</h2>
+                <button class="close-btn" onclick="closeBetAmountModal()">✕</button>
+            </div>
+            <div style="padding: 10px 0; color: rgba(255,255,255,0.85); text-align: center;">
+                Escolha um valor para apostar com <span id="betAmountOpponent" style="color: #00ffff;"></span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px;">
+                <button class="join-tournament-btn" onclick="createBetWithAmount(5)">R$ 5,00</button>
+                <button class="join-tournament-btn" onclick="createBetWithAmount(10)">R$ 10,00</button>
+                <button class="join-tournament-btn" onclick="createBetWithAmount(15)">R$ 15,00</button>
+                <button class="join-tournament-btn" onclick="createBetWithAmount(20)">R$ 20,00</button>
+            </div>
+            <button class="join-tournament-btn" onclick="closeBetAmountModal()" style="margin-top: 15px; background: rgba(255,0,0,0.3);">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Modal de Pagamento da Aposta -->
+    <div class="payment-modal" id="betPaymentModal">
+        <div class="payment-content">
+            <div class="payment-header">
+                <h2>Pagar Aposta</h2>
+                <button class="close-btn" onclick="closeBetPaymentModal()">✕</button>
+            </div>
+            <div class="payment-details" id="betPaymentDetails"></div>
+            <div class="payment-methods">
+                <button class="payment-btn pix-btn" id="betPixBtn" onclick="processBetPayment('pix')">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' font-size='60' fill='%2314b8a6'%3E📱%3C/text%3E%3C/svg%3E" alt="PIX" class="payment-icon">
+                    PIX
+                </button>
+                <button class="payment-btn card-btn" id="betCardBtn" onclick="processBetPayment('card')">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='50' text-anchor='middle' dy='.3em' font-size='60' fill='%238b5cf6'%3E💳%3C/text%3E%3C/svg%3E" alt="Cartão" class="payment-icon">
+                    Cartão
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal de Pagamento -->
     <div class="payment-modal" id="paymentModal">
         <div class="payment-content">
@@ -4774,6 +4815,9 @@ playFaustao();
         // ====== SISTEMA DE APOSTAS ======
         let activeBetsList = [];
         let currentBetSelection = null;
+        const ALLOWED_BET_AMOUNTS = [5, 10, 15, 20];
+        let selectedBetOpponent = null;
+        let selectedBetForPayment = null;
 
         async function showBets() {
             if (!currentUser) {
@@ -4903,6 +4947,66 @@ playFaustao();
             return '';
         }
 
+        function openBetAmountModal(opponentUsername) {
+            selectedBetOpponent = opponentUsername;
+            const modal = document.getElementById('betAmountModal');
+            const opponentLabel = document.getElementById('betAmountOpponent');
+            if (opponentLabel) {
+                opponentLabel.textContent = opponentUsername;
+            }
+            if (modal) {
+                modal.classList.add('active');
+            }
+        }
+
+        function closeBetAmountModal() {
+            selectedBetOpponent = null;
+            const modal = document.getElementById('betAmountModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        async function createBetWithAmount(amount) {
+            if (!selectedBetOpponent) {
+                alert('Oponente não definido para a aposta.');
+                return;
+            }
+
+            if (!ALLOWED_BET_AMOUNTS.includes(Number(amount))) {
+                alert('Valor inválido. Escolha apenas 5, 10, 15 ou 20.');
+                return;
+            }
+
+            try {
+                const token = localStorage.getItem('authToken');
+                const response = await fetch('/api/bet/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        opponentName: selectedBetOpponent,
+                        amount: Number(amount)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    closeBetAmountModal();
+                    alert('Aposta criada! O oponente precisará aceitar para jogar.');
+                    showBets();
+                } else {
+                    alert('Erro: ' + (data.error || 'Erro desconhecido'));
+                }
+            } catch (err) {
+                alert('Erro ao criar aposta');
+                console.error(err);
+            }
+        }
+
         async function showCreateBetModal() {
             const opponentUsername = prompt('Digite o nome de usuário do oponente:');
             if (!opponentUsername) return;
@@ -4916,44 +5020,11 @@ playFaustao();
                     alert('Usuário não encontrado! Verifique o nome e tente novamente.');
                     return;
                 }
+
+                openBetAmountModal(opponentUsername);
             } catch (err) {
                 alert('Erro ao buscar usuário');
                 return;
-            }
-
-            const amountStr = prompt('Digite o valor da aposta (R$):');
-            const amount = parseFloat(amountStr);
-            
-            if (!amount || amount <= 0) {
-                alert('Valor inválido');
-                return;
-            }
-
-            try {
-                const token = localStorage.getItem('authToken');
-                const response = await fetch('/api/bet/create', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        opponentName: opponentUsername,
-                        amount: amount
-                    })
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    alert('Aposta criada! O oponente precisará aceitar para jogar.');
-                    showBets(); // Recarrega a lista
-                } else {
-                    alert('Erro: ' + (data.error || 'Erro desconhecido'));
-                }
-            } catch (err) {
-                alert('Erro ao criar aposta');
-                console.error(err);
             }
         }
 
@@ -5008,14 +5079,88 @@ playFaustao();
             }
         }
 
-        async function payBet(betId) {
-            // Primeiro, cria o pagamento via Mercado Pago
-            const method = confirm('Pagamento via PIX? (OK = PIX, Cancel = Cartão)') ? 'pix' : 'card';
-            
+        function showBetPaymentModal(bet) {
+            selectedBetForPayment = bet;
+
+            const modal = document.getElementById('betPaymentModal');
+            const details = document.getElementById('betPaymentDetails');
+            const pixBtn = document.getElementById('betPixBtn');
+            const cardBtn = document.getElementById('betCardBtn');
+
+            if (!modal || !details || !pixBtn || !cardBtn) {
+                alert('Modal de pagamento de aposta não encontrado.');
+                return;
+            }
+
+            pixBtn.classList.remove('selected');
+            cardBtn.classList.remove('selected');
+            pixBtn.disabled = false;
+            cardBtn.disabled = false;
+            pixBtn.textContent = 'PIX';
+            cardBtn.textContent = 'Cartão';
+
+            details.innerHTML = `
+                <div class="detail-line">
+                    <span class="detail-label">Aposta:</span>
+                    <span class="detail-value">${bet.challenger.name} vs ${bet.opponent.name}</span>
+                </div>
+                <div class="detail-line">
+                    <span class="detail-label">Valor da Aposta:</span>
+                    <span class="detail-value">R$ ${Number(bet.amount).toFixed(2)}</span>
+                </div>
+                <div class="detail-line">
+                    <span class="detail-label">Jogador:</span>
+                    <span class="detail-value">${currentUser.username}</span>
+                </div>
+                <div class="detail-line" style="border-bottom: 2px solid rgba(0, 255, 255, 0.3) !important; padding-bottom: 15px !important; margin-bottom: 15px !important;">
+                    <span class="detail-label">Total a Pagar:</span>
+                    <span class="detail-value" style="font-size: 1.2em;">R$ ${Number(bet.amount).toFixed(2)}</span>
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closeBetPaymentModal() {
+            selectedBetForPayment = null;
+            const modal = document.getElementById('betPaymentModal');
+            const pixBtn = document.getElementById('betPixBtn');
+            const cardBtn = document.getElementById('betCardBtn');
+
+            if (pixBtn && cardBtn) {
+                pixBtn.classList.remove('selected');
+                cardBtn.classList.remove('selected');
+                pixBtn.disabled = false;
+                cardBtn.disabled = false;
+                pixBtn.textContent = 'PIX';
+                cardBtn.textContent = 'Cartão';
+            }
+
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        async function processBetPayment(method) {
+            const bet = selectedBetForPayment;
+            if (!bet) {
+                alert('Aposta não selecionada.');
+                return;
+            }
+
+            const pixBtn = document.getElementById('betPixBtn');
+            const cardBtn = document.getElementById('betCardBtn');
+            const selectedBtn = method === 'pix' ? pixBtn : cardBtn;
+            const otherBtn = method === 'pix' ? cardBtn : pixBtn;
+
+            selectedBtn.classList.add('selected');
+            otherBtn.classList.remove('selected');
+            selectedBtn.disabled = true;
+            otherBtn.disabled = true;
+            selectedBtn.textContent = method === 'pix' ? 'Processando PIX...' : 'Processando Cartão...';
+
             try {
                 const token = localStorage.getItem('authToken');
-                console.log('[PAY BET] Iniciando pagamento da aposta:', betId, 'Método:', method);
-                
                 const response = await fetch('/api/bet/create-payment', {
                     method: 'POST',
                     headers: {
@@ -5023,27 +5168,45 @@ playFaustao();
                         'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({
-                        betId: betId,
+                        betId: bet.id,
                         paymentMethod: method
                     })
                 });
 
-                console.log('[PAY BET] Status da resposta:', response.status);
                 const data = await response.json();
-                console.log('[PAY BET] Dados retornados:', data);
-                
+
                 if (data.success && data.initPoint) {
-                    // Redireciona para o pagamento
                     window.location.href = data.initPoint;
                 } else {
-                    console.error('[PAY BET] Erro na resposta:', data);
                     alert('Erro: ' + (data.error || 'Erro ao gerar pagamento'));
+                    selectedBtn.classList.remove('selected');
+                    selectedBtn.disabled = false;
+                    otherBtn.disabled = false;
+                    selectedBtn.textContent = method === 'pix' ? 'PIX' : 'Cartão';
                 }
             } catch (err) {
-                console.error('[PAY BET] Erro na requisição:', err);
                 alert('Erro ao processar pagamento');
                 console.error(err);
+                selectedBtn.classList.remove('selected');
+                selectedBtn.disabled = false;
+                otherBtn.disabled = false;
+                selectedBtn.textContent = method === 'pix' ? 'PIX' : 'Cartão';
             }
+        }
+
+        async function payBet(betId) {
+            const bet = activeBetsList.find(item => item.id === betId);
+            if (!bet) {
+                alert('Aposta não encontrada. Recarregue a lista.');
+                return;
+            }
+
+            if (!ALLOWED_BET_AMOUNTS.includes(Number(bet.amount))) {
+                alert('Valor de aposta inválido. Apenas 5, 10, 15 ou 20 são permitidos.');
+                return;
+            }
+
+            showBetPaymentModal(bet);
         }
 
         function joinBetGame(betId) {
