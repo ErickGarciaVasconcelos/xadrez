@@ -617,7 +617,9 @@ app.post('/api/bet/accept', (req, res) => {
         }
 
         console.log(`[APOSTA] Aposta aceita: ${betId} | ${decoded.username}`);
-        io.emit('betAccepted', bet);
+        // Notifica os dois jogadores da aposta
+        io.to(bet.challenger.id).emit('betAccepted', bet);
+        io.to(bet.opponent.id).emit('betAccepted', bet);
 
         res.json({
             success: true,
@@ -962,7 +964,15 @@ app.post('/api/webhook-bet-payment', async (req, res) => {
                     console.log(`[APOSTA-WEBHOOK] ✓ Aposta atualizada: ${paymentRecord.betId} | Status: ${bet.status} | Pagou: ${bet.paidBy.length}/2`);
                     
                     // Notifica via Socket.IO
-                    io.emit('betPaymentConfirmed', {
+                    // Notifica ambos os jogadores
+                    io.to(bet.challenger.id).emit('betPaymentConfirmed', {
+                        betId: paymentRecord.betId,
+                        userId: userId,
+                        paidBy: bet.paidBy,
+                        status: bet.status,
+                        readyToPlay: challengerPaid && opponentPaid
+                    });
+                    io.to(bet.opponent.id).emit('betPaymentConfirmed', {
                         betId: paymentRecord.betId,
                         userId: userId,
                         paidBy: bet.paidBy,
@@ -1071,7 +1081,13 @@ app.get('/bet-failure', async (req, res) => {
         console.log(`[APOSTA-FALHA] Pagamento falhou: betId=${betId}, userId=${userId}`);
 
         // Notifica via Socket.IO
-        io.emit('betPaymentFailed', {
+        // Notifica ambos os jogadores que o pagamento falhou
+        io.to(bet.challenger.id).emit('betPaymentFailed', {
+            betId: betId,
+            userId: userId,
+            message: 'Pagamento não foi completado'
+        });
+        io.to(bet.opponent.id).emit('betPaymentFailed', {
             betId: betId,
             userId: userId,
             message: 'Pagamento não foi completado'
@@ -1093,7 +1109,13 @@ app.get('/bet-pending', async (req, res) => {
         console.log(`[APOSTA-PENDENTE] Pagamento pendente: betId=${betId}, userId=${userId}`);
 
         // Notifica via Socket.IO
-        io.emit('betPaymentPending', {
+        // Notifica ambos os jogadores que o pagamento está em análise
+        io.to(bet.challenger.id).emit('betPaymentPending', {
+            betId: betId,
+            userId: userId,
+            message: 'Pagamento em análise'
+        });
+        io.to(bet.opponent.id).emit('betPaymentPending', {
             betId: betId,
             userId: userId,
             message: 'Pagamento em análise'
@@ -1202,7 +1224,9 @@ app.post('/api/bet/complete', (req, res) => {
 
         console.log(`[APOSTA] ✓ Aposta finalizada: ${betId} | Vencedor: ${winnerId} | Prêmio: R$ ${bet.prizeAmount}`);
 
-        io.emit('betCompleted', bet);
+        // Notifica ambos os jogadores que a aposta foi finalizada
+        io.to(bet.challenger.id).emit('betCompleted', bet);
+        io.to(bet.opponent.id).emit('betCompleted', bet);
 
         res.json({
             success: true,
@@ -1557,9 +1581,12 @@ loadBets();
             allBets.push({ ...activeBetsData[betIndex], status: 'completed' });
             saveBets(allBets);
 
+            // Reconstruct bet object from activeBetsData
+            const betForEmit = activeBetsData[betIndex] || {};
             io.to(currentRoom).emit('betGameFinished', {
                 winner: winner,
-                bet: bet
+                bet: betForEmit,
+                betId: betId
             });
 
             console.log(`[BET-SOCKET] Jogo de aposta finalizado: ${betId} | Vencedor: ${winner}`);

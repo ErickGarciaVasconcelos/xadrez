@@ -2844,6 +2844,7 @@ playFaustao();
             
             socket.on('connect', () => {
                 updateConnectionStatus('conectado');
+                registerBetListeners();
             });
             
             socket.on('connect_error', (err) => {
@@ -5302,8 +5303,7 @@ playFaustao();
             if (socket && socket.connected) {
                 socket.emit('joinBetRoom', betId, token);
             } else {
-                alert('Conectando ao servidor...');
-                initSocket();
+                alert('Conectando ao servidor...'); 
                 setTimeout(() => joinBetGame(betId), 1000);
             }
         }
@@ -5313,8 +5313,11 @@ playFaustao();
             modal.classList.remove('active');
         }
 
-        // Listener para eventos de apostas
-        if (socket) {
+        
+        // ===== REGISTRAR LISTENERS DE APOSTA =====
+        function registerBetListeners() {
+            if (!socket) return;
+            
             socket.on('betAccepted', (bet) => {
                 if (currentUser && (bet.challenger.id === currentUser.id || bet.opponent.id === currentUser.id)) {
                     alert('Uma aposta foi aceita!');
@@ -5333,14 +5336,10 @@ playFaustao();
                 console.log('Entrou na sala de aposta:', data);
                 gameMode = 'bet';
                 currentBetSelection = data;
-                
-                // Entra na sala do jogo
                 const room = data.roomId;
                 localStorage.setItem('gameRoomId', room);
                 localStorage.setItem('gameMode', 'online');
                 localStorage.setItem('gameSession', 'active');
-                
-                // Atualiza a UI
                 document.querySelector('.game-header h1').textContent = `Xadrez - Aposta: R$ ${data.bet.amount}`;
             });
 
@@ -5348,66 +5347,57 @@ playFaustao();
                 console.log('Jogo de aposta iniciado:', data);
                 gameActive = true;
                 gameMode = 'bet';
-                
-                // Define a cor do jogador
                 if (currentUser.id === data.challenger.id) {
                     playerColor = 'white';
                 } else {
                     playerColor = 'black';
                 }
-                
-                // Notifica o usuário
                 alert('Jogo started! Você é ' + (playerColor === 'white' ? 'BRANCAS' : 'PRETAS'));
             });
 
-             socket.on('betGameFinished', (data) => {
-                 const isWinner = data.winner === currentUser.username;
-                 if (isWinner) {
-                     alert('🎉 Você venceu a aposta! R$ ' + data.bet.prizeAmount.toFixed(2));
-                 } else {
-                     alert('❌ Você perdeu a aposta.');
-                 }
-                 gameActive = false;
-                 showBets();
-             });
+            socket.on('betGameFinished', (data) => {
+                const isWinner = data.winner === currentUser.username;
+                if (isWinner) {
+                    alert('🎉 Você venceu a aposta! R$ ' + (data.bet.prizeAmount || 0).toFixed(2));
+                } else {
+                    alert('❌ Você perdeu a aposta.');
+                }
+                gameActive = false;
+                showBets();
+            });
 
-             // ===== Listeners para Pagamento de Aposta =====
-             socket.on('betPaymentConfirmed', (data) => {
-                 console.log('[PAGAMENTO-CONFIRMADO]', data);
-                 if (data.readyToPlay) {
-                     // Ambos os jogadores pagaram! Jogo pode começar
-                     alert(`✅ Pagamento confirmado! Aposta pronta para começar!`);
-                 } else {
-                     // Apenas um pagou, aguardando o outro
-                     const waitingFor = data.paidBy.length === 1 ? 
-                         `Aguardando pagamento do outro jogador...` :
-                         `Pagamento recebido!`;
-                     alert(waitingFor);
-                 }
-                 // Recarrega a lista de apostas
-                 if (typeof showBets === 'function') {
-                     showBets();
-                 }
-             });
+            socket.on('betPaymentConfirmed', (data) => {
+                console.log('[PAGAMENTO-CONFIRMADO]', data);
+                if (data.readyToPlay) {
+                    alert(`✅ Pagamento confirmado! Aposta pronta para começar!`);
+                } else {
+                    const waitingFor = data.paidBy.length === 1 ? `Aguardando pagamento do outro jogador...` : `Pagamento recebido!`;
+                    alert(waitingFor);
+                }
+                if (typeof showBets === 'function') {
+                    showBets();
+                }
+            });
 
-             socket.on('betPaymentFailed', (data) => {
-                 console.log('[PAGAMENTO-FALHOU]', data);
-                 alert('❌ Pagamento não foi completado. Tente novamente.');
-                 closeBetPaymentModal();
-                 if (typeof showBets === 'function') {
-                     showBets();
-                 }
-             });
+            socket.on('betPaymentFailed', (data) => {
+                console.log('[PAGAMENTO-FALHOU]', data);
+                alert('❌ Pagamento não foi completado. Tente novamente.');
+                closeBetPaymentModal();
+                if (typeof showBets === 'function') {
+                    showBets();
+                }
+            });
 
-             socket.on('betPaymentPending', (data) => {
-                 console.log('[PAGAMENTO-PENDENTE]', data);
-                 alert('⏳ Seu pagamento está em análise. Aguarde confirmação...');
-                 closeBetPaymentModal();
-                 if (typeof showBets === 'function') {
-                     showBets();
-                 }
-             });
-         }
+            socket.on('betPaymentPending', (data) => {
+                console.log('[PAGAMENTO-PENDENTE]', data);
+                alert('⏳ Seu pagamento está em análise. Aguarde confirmação...');
+                closeBetPaymentModal();
+                if (typeof showBets === 'function') {
+                    showBets();
+                }
+            });
+        }
+        
 
         function joinTournament(tournamentId, entryFee, tournamentName) {
             selectedTournament = {
