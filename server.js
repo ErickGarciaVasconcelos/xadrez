@@ -1,3 +1,4 @@
+// Sistema de Apostas Atualizado - Deploy v1.0.1 (2026-04-16)
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
