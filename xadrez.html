@@ -2017,14 +2017,96 @@
     </div>
 
     <script>
-        // ====== AUTENTICAÇÃO ======
-        let currentUser = null;
-        let authToken = null;
+         // ====== AUTENTICAÇÃO ======
+         let currentUser = null;
+         let authToken = null;
 
-        // Verifica se usuário já está logado ao carregar a página
-        window.addEventListener('DOMContentLoaded', () => {
-            checkUserAuthentication();
-        });
+         // ===== HANDLER PARA RETORNO DO MERCADO PAGO =====
+         function handlePaymentCallback() {
+             try {
+                 const params = new URLSearchParams(window.location.search);
+                 const paymentSuccess = params.get('paymentSuccess');
+                 const paymentFailed = params.get('paymentFailed');
+                 const paymentPending = params.get('paymentPending');
+                 const betId = params.get('betId');
+                 const error = params.get('error');
+
+                 if (error) {
+                     console.error('[PAGAMENTO-ERRO] Erro no retorno:', error);
+                     alert(`❌ Erro no pagamento: ${error}`);
+                     // Limpa a URL
+                     window.history.replaceState({}, document.title, window.location.pathname);
+                     return;
+                 }
+
+                 if (paymentSuccess === 'true' && betId) {
+                     console.log('[PAGAMENTO-SUCESSO] Retorno com sucesso:', betId);
+                     alert('✅ Pagamento realizado com sucesso!');
+                     // Verifica o status da aposta
+                     setTimeout(() => {
+                         checkBetPaymentStatus(betId);
+                     }, 1000);
+                     // Limpa a URL
+                     window.history.replaceState({}, document.title, window.location.pathname);
+                 } else if (paymentFailed === 'true' && betId) {
+                     console.log('[PAGAMENTO-FALHOU] Retorno com falha:', betId);
+                     alert('❌ Pagamento não foi completado.');
+                     // Limpa a URL
+                     window.history.replaceState({}, document.title, window.location.pathname);
+                 } else if (paymentPending === 'true' && betId) {
+                     console.log('[PAGAMENTO-PENDENTE] Retorno com pendência:', betId);
+                     alert('⏳ Seu pagamento está em análise.');
+                     // Limpa a URL
+                     window.history.replaceState({}, document.title, window.location.pathname);
+                 }
+             } catch (err) {
+                 console.error('[PAGAMENTO-CALLBACK] Erro ao processar:', err);
+             }
+         }
+
+         // Função para verificar o status de pagamento da aposta
+         async function checkBetPaymentStatus(betId) {
+             try {
+                 const token = localStorage.getItem('authToken');
+                 if (!token) return;
+
+                 const response = await fetch(`/api/bet/${betId}/payment-status`, {
+                     headers: {
+                         'Authorization': `Bearer ${token}`
+                     }
+                 });
+
+                 if (!response.ok) {
+                     console.error('[PAGAMENTO-STATUS] Erro ao verificar status:', response.status);
+                     return;
+                 }
+
+                 const data = await response.json();
+                 console.log('[PAGAMENTO-STATUS]', data);
+
+                 if (data.readyToPlay) {
+                     alert('🎉 Ambos os jogadores pagaram! Jogo pronto para começar!');
+                 } else if (data.bothPaid) {
+                     alert('✅ Seu pagamento foi registrado! Aguardando o outro jogador...');
+                 } else {
+                     alert('✅ Seu pagamento foi registrado! Aguardando o outro jogador pagar...');
+                 }
+
+                 // Recarrega a lista de apostas
+                 if (typeof showBets === 'function') {
+                     showBets();
+                 }
+             } catch (err) {
+                 console.error('[PAGAMENTO-STATUS] Erro:', err);
+             }
+         }
+
+         // Verifica se usuário já está logado ao carregar a página
+         window.addEventListener('DOMContentLoaded', () => {
+             checkUserAuthentication();
+             // Verifica se retornou de pagamento do Mercado Pago
+             handlePaymentCallback();
+         });
 
          function checkUserAuthentication() {
              const savedToken = localStorage.getItem('authToken');
@@ -5278,17 +5360,54 @@ playFaustao();
                 alert('Jogo started! Você é ' + (playerColor === 'white' ? 'BRANCAS' : 'PRETAS'));
             });
 
-            socket.on('betGameFinished', (data) => {
-                const isWinner = data.winner === currentUser.username;
-                if (isWinner) {
-                    alert('🎉 Você venceu a aposta! R$ ' + data.bet.prizeAmount.toFixed(2));
-                } else {
-                    alert('❌ Você perdeu a aposta.');
-                }
-                gameActive = false;
-                showBets();
-            });
-        }
+             socket.on('betGameFinished', (data) => {
+                 const isWinner = data.winner === currentUser.username;
+                 if (isWinner) {
+                     alert('🎉 Você venceu a aposta! R$ ' + data.bet.prizeAmount.toFixed(2));
+                 } else {
+                     alert('❌ Você perdeu a aposta.');
+                 }
+                 gameActive = false;
+                 showBets();
+             });
+
+             // ===== Listeners para Pagamento de Aposta =====
+             socket.on('betPaymentConfirmed', (data) => {
+                 console.log('[PAGAMENTO-CONFIRMADO]', data);
+                 if (data.readyToPlay) {
+                     // Ambos os jogadores pagaram! Jogo pode começar
+                     alert(`✅ Pagamento confirmado! Aposta pronta para começar!`);
+                 } else {
+                     // Apenas um pagou, aguardando o outro
+                     const waitingFor = data.paidBy.length === 1 ? 
+                         `Aguardando pagamento do outro jogador...` :
+                         `Pagamento recebido!`;
+                     alert(waitingFor);
+                 }
+                 // Recarrega a lista de apostas
+                 if (typeof showBets === 'function') {
+                     showBets();
+                 }
+             });
+
+             socket.on('betPaymentFailed', (data) => {
+                 console.log('[PAGAMENTO-FALHOU]', data);
+                 alert('❌ Pagamento não foi completado. Tente novamente.');
+                 closeBetPaymentModal();
+                 if (typeof showBets === 'function') {
+                     showBets();
+                 }
+             });
+
+             socket.on('betPaymentPending', (data) => {
+                 console.log('[PAGAMENTO-PENDENTE]', data);
+                 alert('⏳ Seu pagamento está em análise. Aguarde confirmação...');
+                 closeBetPaymentModal();
+                 if (typeof showBets === 'function') {
+                     showBets();
+                 }
+             });
+         }
 
         function joinTournament(tournamentId, entryFee, tournamentName) {
             selectedTournament = {
@@ -5487,6 +5606,19 @@ playFaustao();
          board = createInitialBoard();
          createBoard();
          // updateTurnIndicator() - função foi desabilitada
+
+         // Exemplo com Sequelize
+        const { Sequelize } = require('sequelize');
+
+        const sequelize = new Sequelize(process.env.DATABASE_URL, {
+        dialect: 'postgres',
+        dialectOptions: {
+            ssl: {
+            require: true,
+            rejectUnauthorized: false // Necessário para conexões externas/Render
+            }
+        }
+        });
      </script>
  </body>
  </html>

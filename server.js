@@ -352,6 +352,8 @@ function createBet(challengerId, challengerName, opponentId, opponentName, amoun
         houseFee: parseFloat((parsedAmount * HOUSE_FEE_PERCENTAGE).toFixed(2)),
         prizeAmount: parseFloat((parsedAmount * 2 - parsedAmount * HOUSE_FEE_PERCENTAGE * 2).toFixed(2)),
         status: 'pending', // pending, accepted, in_progress, completed, cancelled
+        paidBy: [], // Rastreia quem já pagou: [userId1, userId2]
+        paymentPreferenceIds: {}, // Mapeia userId -> preferenceId do Mercado Pago
         winner: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -543,6 +545,58 @@ app.get('/api/bets/my-bets', (req, res) => {
     } catch (err) {
         console.error('Erro ao listar apostas:', err);
         res.status(500).json({ error: 'Erro ao listar apostas' });
+    }
+});
+
+// Rota: Obter status de pagamento de uma aposta
+app.get('/api/bet/:betId/payment-status', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { betId } = req.params;
+        loadBets();
+        const bet = activeBetsData.find(b => b.id === betId);
+
+        if (!bet) {
+            return res.status(404).json({ error: 'Aposta não encontrada' });
+        }
+
+        if (bet.challenger.id !== decoded.id && bet.opponent.id !== decoded.id) {
+            return res.status(403).json({ error: 'Você não participa desta aposta' });
+        }
+
+        // Inicializa campos se não existirem (compatibilidade com dados antigos)
+        if (!bet.paidBy) {
+            bet.paidBy = [];
+        }
+
+        const challengerPaid = bet.paidBy.includes(bet.challenger.id);
+        const opponentPaid = bet.paidBy.includes(bet.opponent.id);
+        const bothPaid = challengerPaid && opponentPaid;
+
+        res.json({
+            success: true,
+            betId: betId,
+            status: bet.status,
+            paidBy: bet.paidBy,
+            challenger: {
+                name: bet.challenger.name,
+                paid: challengerPaid
+            },
+            opponent: {
+                name: bet.opponent.name,
+                paid: opponentPaid
+            },
+            bothPaid: bothPaid,
+            readyToPlay: bet.status === 'in_progress'
+        });
+    } catch (err) {
+        console.error('Erro ao obter status de pagamento:', err);
+        res.status(500).json({ error: 'Erro ao obter status de pagamento' });
     }
 });
 
@@ -869,14 +923,52 @@ app.post('/api/webhook-bet-payment', async (req, res) => {
                 loadBets();
                 const betIndex = activeBetsData.findIndex(b => b.id === paymentRecord.betId);
                 if (betIndex !== -1) {
-                    activeBetsData[betIndex].status = 'in_progress';
-                    activeBetsData[betIndex].updatedAt = new Date().toISOString();
+                    const bet = activeBetsData[betIndex];
+                    
+                    // Inicializa campos se não existirem (compatibilidade com dados antigos)
+                    if (!bet.paidBy) {
+                        bet.paidBy = [];
+                    }
+                    if (!bet.paymentPreferenceIds) {
+                        bet.paymentPreferenceIds = {};
+                    }
+
+                    // Marca o usuário como pagou
+                    const userId = paymentRecord.userId;
+                    if (!bet.paidBy.includes(userId)) {
+                        bet.paidBy.push(userId);
+                        console.log(`[APOSTA-WEBHOOK] ✓ ${paymentRecord.username} (${userId}) marcado como pagou`);
+                    }
+
+                    // Armazena preferenceId
+                    bet.paymentPreferenceIds[userId] = paymentRecord.id;
+
+                    // VERIFICA SE AMBOS PAGARAM
+                    const challengerPaid = bet.paidBy.includes(bet.challenger.id);
+                    const opponentPaid = bet.paidBy.includes(bet.opponent.id);
+                    
+                    if (challengerPaid && opponentPaid) {
+                        // ✓ Ambos pagaram! Muda status para in_progress
+                        bet.status = 'in_progress';
+                        console.log(`[APOSTA-WEBHOOK] ✓✓ AMBOS PAGARAM! Aposta ${paymentRecord.betId} pronta para começar`);
+                    } else {
+                        console.log(`[APOSTA-WEBHOOK] Aguardando pagamento do outro jogador (${bet.paidBy.length}/2 pagou)`);
+                    }
+
+                    bet.updatedAt = new Date().toISOString();
+                    activeBetsData[betIndex] = bet;
                     saveBets(activeBetsData);
                     
-                    console.log(`[APOSTA] ✓ Aposta em andamento: ${paymentRecord.betId} | Valor: R$ ${activeBetsData[betIndex].amount}`);
+                    console.log(`[APOSTA-WEBHOOK] ✓ Aposta atualizada: ${paymentRecord.betId} | Status: ${bet.status} | Pagou: ${bet.paidBy.length}/2`);
                     
                     // Notifica via Socket.IO
-                    io.emit('betInProgress', activeBetsData[betIndex]);
+                    io.emit('betPaymentConfirmed', {
+                        betId: paymentRecord.betId,
+                        userId: userId,
+                        paidBy: bet.paidBy,
+                        status: bet.status,
+                        readyToPlay: challengerPaid && opponentPaid
+                    });
                 }
             }
         }
@@ -887,6 +979,135 @@ app.post('/api/webhook-bet-payment', async (req, res) => {
         res.json({ success: true });
     }
 });
+
+// ===== ROTAS DE RETORNO DO MERCADO PAGO (CRÍTICO) =====
+
+// Rota: Usuário retorna após pagamento bem-sucedido no Mercado Pago
+app.get('/bet-success', async (req, res) => {
+    try {
+        const { bet: betId, user: userId, preference: preferenceId } = req.query;
+        
+        if (!betId || !userId) {
+            return res.redirect('/?error=invalid_params');
+        }
+
+        console.log(`[APOSTA-SUCESSO] Retorno do Mercado Pago: betId=${betId}, userId=${userId}, preference=${preferenceId}`);
+
+        // Carrega a aposta
+        loadBets();
+        const betIndex = activeBetsData.findIndex(b => b.id === betId);
+        
+        if (betIndex === -1) {
+            console.error(`[APOSTA-SUCESSO] Aposta não encontrada: ${betId}`);
+            return res.redirect(`/?error=bet_not_found`);
+        }
+
+        const bet = activeBetsData[betIndex];
+
+        // Verifica se o usuário é parte da aposta
+        if (bet.challenger.id !== userId && bet.opponent.id !== userId) {
+            console.error(`[APOSTA-SUCESSO] Usuário não autorizado: ${userId}`);
+            return res.redirect(`/?error=unauthorized`);
+        }
+
+        // Inicializa paidBy se não existir (para compatibilidade com dados antigos)
+        if (!bet.paidBy) {
+            bet.paidBy = [];
+        }
+        if (!bet.paymentPreferenceIds) {
+            bet.paymentPreferenceIds = {};
+        }
+
+        // Marca o usuário como pagou
+        if (!bet.paidBy.includes(userId)) {
+            bet.paidBy.push(userId);
+            console.log(`[APOSTA-SUCESSO] ✓ ${userId} marcado como pagou. Total pagou: ${bet.paidBy.length}/2`);
+        }
+
+        // Armazena o ID da preferência do Mercado Pago
+        if (preferenceId) {
+            bet.paymentPreferenceIds[userId] = preferenceId;
+        }
+
+        // VERIFICA SE AMBOS OS JOGADORES PAGARAM
+        const challengerPaid = bet.paidBy.includes(bet.challenger.id);
+        const opponentPaid = bet.paidBy.includes(bet.opponent.id);
+        
+        if (challengerPaid && opponentPaid) {
+            // ✓ Ambos pagaram! Aposta pode começar
+            bet.status = 'in_progress';
+            console.log(`[APOSTA-SUCESSO] ✓✓ AMBOS PAGARAM! Aposta ${betId} pronta para começar`);
+        } else {
+            // Apenas um pagou, aguardando o outro
+            console.log(`[APOSTA-SUCESSO] Aguardando pagamento do outro jogador...`);
+        }
+
+        bet.updatedAt = new Date().toISOString();
+        saveBets(activeBetsData);
+
+        // Notifica via Socket.IO que pagamento foi confirmado
+        io.emit('betPaymentConfirmed', {
+            betId: betId,
+            userId: userId,
+            paidBy: bet.paidBy,
+            status: bet.status,
+            readyToPlay: challengerPaid && opponentPaid
+        });
+
+        // Redireciona para o jogo com sucesso
+        res.redirect(`/?paymentSuccess=true&betId=${betId}`);
+
+    } catch (err) {
+        console.error('[APOSTA-SUCESSO] Erro:', err);
+        res.redirect(`/?error=payment_error`);
+    }
+});
+
+// Rota: Usuário retorna após pagamento falhar no Mercado Pago
+app.get('/bet-failure', async (req, res) => {
+    try {
+        const { bet: betId, user: userId } = req.query;
+        
+        console.log(`[APOSTA-FALHA] Pagamento falhou: betId=${betId}, userId=${userId}`);
+
+        // Notifica via Socket.IO
+        io.emit('betPaymentFailed', {
+            betId: betId,
+            userId: userId,
+            message: 'Pagamento não foi completado'
+        });
+
+        res.redirect(`/?paymentFailed=true&betId=${betId}`);
+
+    } catch (err) {
+        console.error('[APOSTA-FALHA] Erro:', err);
+        res.redirect(`/?error=failure_handler_error`);
+    }
+});
+
+// Rota: Usuário retorna com pagamento pendente no Mercado Pago
+app.get('/bet-pending', async (req, res) => {
+    try {
+        const { bet: betId, user: userId } = req.query;
+        
+        console.log(`[APOSTA-PENDENTE] Pagamento pendente: betId=${betId}, userId=${userId}`);
+
+        // Notifica via Socket.IO
+        io.emit('betPaymentPending', {
+            betId: betId,
+            userId: userId,
+            message: 'Pagamento em análise'
+        });
+
+        res.redirect(`/?paymentPending=true&betId=${betId}`);
+
+    } catch (err) {
+        console.error('[APOSTA-PENDENTE] Erro:', err);
+        res.redirect(`/?error=pending_handler_error`);
+    }
+});
+
+// ===== FIM ROTAS DE RETORNO DO MERCADO PAGO =====
 
 // Iniciar partida de uma aposta
 app.post('/api/bet/start-game', (req, res) => {
@@ -907,8 +1128,25 @@ app.post('/api/bet/start-game', (req, res) => {
 
         const bet = activeBetsData[betIndex];
         
+        // Verifica se a aposta está em andamento (ambos já pagaram)
         if (bet.status !== 'in_progress') {
-            return res.status(400).json({ error: 'Aposta precisa estar em andamento' });
+            // Inicializa campos se não existirem
+            if (!bet.paidBy) {
+                bet.paidBy = [];
+            }
+            
+            const challengerPaid = bet.paidBy.includes(bet.challenger.id);
+            const opponentPaid = bet.paidBy.includes(bet.opponent.id);
+            
+            if (!challengerPaid || !opponentPaid) {
+                return res.status(400).json({ 
+                    error: 'Ambos os jogadores precisam pagar antes de iniciar o jogo',
+                    waitingFor: {
+                        challenger: !challengerPaid ? bet.challenger.name : null,
+                        opponent: !opponentPaid ? bet.opponent.name : null
+                    }
+                });
+            }
         }
 
         if (bet.challenger.id !== decoded.id && bet.opponent.id !== decoded.id) {
