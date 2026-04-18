@@ -26,6 +26,7 @@ const usersFilePath = path.resolve(dataDir, 'users.json');
 const tournamentsFilePath = path.resolve(dataDir, 'tournaments.json');
 const paymentsFilePath = path.resolve(dataDir, 'payments.json');
 const betsFilePath = path.resolve(dataDir, 'bets.json');
+const transactionsFilePath = path.resolve(dataDir, 'transactions.json');
 const JWT_SECRET = 'your-secret-key-change-in-production';
 const HOUSE_FEE_PERCENTAGE = 0.05; // 5% para a banca
 const ALLOWED_BET_AMOUNTS = [5, 10, 15, 20];
@@ -54,6 +55,7 @@ ensureDataFile(usersFilePath, 'users');
 ensureDataFile(tournamentsFilePath, 'tournaments');
 ensureDataFile(paymentsFilePath, 'payments');
 ensureDataFile(betsFilePath, 'bets');
+ensureDataFile(transactionsFilePath, 'transactions');
 
 // ===== FUNÇÕES AUXILIARES (ANTES DAS ROTAS) =====
 
@@ -333,6 +335,40 @@ function loadBets() {
 function saveBets(bets) {
     activeBetsData = bets;
     fs.writeFileSync(betsFilePath, JSON.stringify({ bets }, null, 2));
+}
+
+// ===== FUNÇÕES DE TRANSAÇÕES =====
+function loadTransactions() {
+    try {
+        const data = fs.readFileSync(transactionsFilePath, 'utf-8');
+        const parsed = JSON.parse(data);
+        return parsed.transactions || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+function saveTransactions(transactions) {
+    fs.writeFileSync(transactionsFilePath, JSON.stringify({ transactions }, null, 2));
+}
+
+function recordTransaction(userId, type, amount, betId, description) {
+    const transaction = {
+        id: 'TXN_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        userId: userId,
+        type: type,  // 'bet_win', 'bet_loss', 'deposit', 'withdraw'
+        amount: amount,
+        betId: betId,
+        description: description,
+        timestamp: new Date().toISOString()
+    };
+    
+    const transactions = loadTransactions();
+    transactions.push(transaction);
+    saveTransactions(transactions);
+    
+    console.log(`[TRANSAÇÃO] ${type} | Usuário: ${userId} | Valor: R$ ${amount.toFixed(2)} | ID: ${transaction.id}`);
+    return transaction;
 }
 
 function createBet(challengerId, challengerName, opponentId, opponentName, amount) {
@@ -1268,6 +1304,8 @@ app.post('/api/signup', async (req, res) => {
             password: hashedPassword,
             wins: 0,
             losses: 0,
+            balance: 0,  // Saldo da carteira (R$)
+            pixKey: null,  // Chave PIX para saque
             createdAt: new Date().toISOString()
         };
 
@@ -1327,8 +1365,9 @@ app.post('/api/login', async (req, res) => {
                 id: user.id,
                 username: user.username,
                 email: user.email,
-                wins: user.wins,
-                losses: user.losses
+                wins: user.wins || 0,
+                losses: user.losses || 0,
+                balance: user.balance || 0
             }
         });
     } catch (err) {
@@ -1561,24 +1600,77 @@ loadBets();
         });
     });
 
-    // Evento para notificar fim de jogo de aposta
+     // Evento para notificar fim de jogo de aposta
     socket.on('betGameEnd', (data) => {
         if (!currentRoom || !currentUser) return;
         
         const { betId, winner } = data;
         
+        console.log(`[BET-SOCKET] betGameEnd recebido: betId=${betId}, winner=${winner}`);
+        
         loadBets();
         const betIndex = activeBetsData.findIndex(b => b.id === betId);
         
         if (betIndex !== -1 && activeBetsData[betIndex].status === 'in_progress') {
-            activeBetsData[betIndex].status = 'completed';
-            activeBetsData[betIndex].winner = winner;
-            activeBetsData[betIndex].completedAt = new Date().toISOString();
+            const bet = activeBetsData[betIndex];
+            
+            // Determina o vencedor real baseado no resultado (Brancas/Pretas)
+            let winnerId = null;
+            let loserId = null;
+            
+            // winner vem como "Brancas" ou "Pretas"
+            // Challenger é sempre white, Opponent é sempre black
+            if (winner === 'Brancas') {
+                winnerId = bet.challenger.id;
+                loserId = bet.opponent.id;
+            } else if (winner === 'Pretas') {
+                winnerId = bet.opponent.id;
+                loserId = bet.challenger.id;
+            }
+            
+            console.log(`[BET-SOCKET] Determinado vencedor: ${winnerId} (${winner})`);
+            
+            // Atualiza status da aposta
+            bet.status = 'completed';
+            bet.winner = winnerId;
+            bet.winnerColor = winner;
+            bet.completedAt = new Date().toISOString();
+            
+            // Carrega usuários para atualizar saldo e estatísticas
+            const users = loadUsers();
+            const winnerUser = users.find(u => u.id === winnerId);
+            const loserUser = users.find(u => u.id === loserId);
+            
+            // ===== TRANSFERIR PRÊMIO =====
+            if (winnerUser) {
+                // Prêmio = total arrecadado - taxa da banca
+                const prizeAmount = bet.prizeAmount || (bet.amount * 2 - (bet.amount * HOUSE_FEE_PERCENTAGE * 2));
+                winnerUser.balance += prizeAmount;
+                winnerUser.wins += 1;
+                
+                recordTransaction(winnerId, 'bet_win', prizeAmount, betId, `Vitória na aposta: ${bet.challenger.name} vs ${bet.opponent.name}`);
+                console.log(`[BET-PRÊMIO] ✓ Vencedor ${winnerUser.username} recebeu R$ ${prizeAmount.toFixed(2)}`);
+            }
+            
+            // Atualiza perdedor
+            if (loserUser) {
+                loserUser.losses += 1;
+                recordTransaction(loserId, 'bet_loss', -bet.amount, betId, `Derrota na aposta: ${bet.challenger.name} vs ${bet.opponent.name}`);
+                console.log(`[BET-DERROTA] Perdedor ${loserUser.username} registrado`);
+            }
+            
+            // Salva as mudanças
+            saveUsers(users);
             saveBets(activeBetsData);
-
+            
             // Salva no histórico
             const allBets = loadBets();
-            allBets.push({ ...activeBetsData[betIndex], status: 'completed' });
+            const historyIndex = allBets.findIndex(b => b.id === betId);
+            if (historyIndex !== -1) {
+                allBets[historyIndex] = bet;
+            } else {
+                allBets.push(bet);
+            }
             saveBets(allBets);
 
             // Reconstruct bet object from activeBetsData
@@ -1586,12 +1678,169 @@ loadBets();
             io.to(currentRoom).emit('betGameFinished', {
                 winner: winner,
                 bet: betForEmit,
-                betId: betId
+                betId: betId,
+                winnerId: winnerId,
+                prizeAmount: betForEmit.prizeAmount || (bet.amount * 2 - (bet.amount * HOUSE_FEE_PERCENTAGE * 2))
             });
 
-            console.log(`[BET-SOCKET] Jogo de aposta finalizado: ${betId} | Vencedor: ${winner}`);
+            console.log(`[BET-SOCKET] ✓ Jogo de aposta finalizado: ${betId} | Vencedor: ${winner} | Prêmio: R$ ${betForEmit.prizeAmount || (bet.amount * 2 - (bet.amount * HOUSE_FEE_PERCENTAGE * 2)).toFixed(2)}`);
+        } else {
+            console.warn(`[BET-SOCKET] Aposta não encontrada ou não está em andamento: ${betId}`);
         }
     });
+});
+
+// ===== ROTAS DE SALDO E TRANSAÇÕES =====
+
+// GET /api/user/balance - Consultar saldo
+app.get('/api/user/balance', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const users = loadUsers();
+        const user = users.find(u => u.id === decoded.id);
+
+        if (!user) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+
+        res.json({
+            success: true,
+            userId: user.id,
+            username: user.username,
+            balance: user.balance || 0,
+            wins: user.wins || 0,
+            losses: user.losses || 0,
+            pixKey: user.pixKey || null
+        });
+    } catch (err) {
+        console.error('Erro ao consultar saldo:', err);
+        res.status(500).json({ error: 'Erro ao consultar saldo' });
+    }
+});
+
+// GET /api/user/transactions - Listar transações
+app.get('/api/user/transactions', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const transactions = loadTransactions();
+        const userTransactions = transactions
+            .filter(t => t.userId === decoded.id)
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+            .slice(0, 50); // Últimas 50 transações
+
+        res.json({
+            success: true,
+            transactions: userTransactions,
+            total: userTransactions.length
+        });
+    } catch (err) {
+        console.error('Erro ao listar transações:', err);
+        res.status(500).json({ error: 'Erro ao listar transações' });
+    }
+});
+
+// POST /api/user/set-pix - Cadastrar chave PIX
+app.post('/api/user/set-pix', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { pixKey } = req.body;
+        if (!pixKey || pixKey.trim().length === 0) {
+            return res.status(400).json({ error: 'Chave PIX inválida' });
+        }
+
+        const users = loadUsers();
+        const userIndex = users.findIndex(u => u.id === decoded.id);
+
+        if (userIndex === -1) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+
+        users[userIndex].pixKey = pixKey.trim();
+        saveUsers(users);
+
+        console.log(`[PIX] Chave PIX cadastrada para ${users[userIndex].username}`);
+
+        res.json({
+            success: true,
+            message: 'Chave PIX cadastrada com sucesso',
+            pixKey: users[userIndex].pixKey
+        });
+    } catch (err) {
+        console.error('Erro ao cadastrar PIX:', err);
+        res.status(500).json({ error: 'Erro ao cadastrar PIX' });
+    }
+});
+
+// POST /api/user/withdraw - Solicitar saque
+app.post('/api/user/withdraw', (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            return res.status(401).json({ error: 'Não autorizado' });
+        }
+
+        const { amount } = req.body;
+        const withdrawAmount = parseFloat(amount);
+
+        if (withdrawAmount <= 0 || withdrawAmount < 5) {
+            return res.status(400).json({ error: 'Valor mínimo de saque é R$ 5,00' });
+        }
+
+        const users = loadUsers();
+        const user = users.find(u => u.id === decoded.id);
+
+        if (!user) {
+            return res.status(404).json({ error: 'Usuário não encontrado' });
+        }
+
+        if (!user.pixKey) {
+            return res.status(400).json({ error: 'Cadastre uma chave PIX primeiro' });
+        }
+
+        if (user.balance < withdrawAmount) {
+            return res.status(400).json({ 
+                error: 'Saldo insuficiente',
+                balance: user.balance,
+                requested: withdrawAmount
+            });
+        }
+
+        // Deduz do saldo
+        user.balance -= withdrawAmount;
+        saveUsers(users);
+
+        // Registra transação
+        recordTransaction(decoded.id, 'withdraw', withdrawAmount, null, `Saque PIX: ${user.pixKey}`);
+
+        console.log(`[SAQUE] ${user.username} solicitou saque de R$ ${withdrawAmount.toFixed(2)} para ${user.pixKey}`);
+
+        res.json({
+            success: true,
+            message: 'Saque solicitado com sucesso',
+            amount: withdrawAmount,
+            newBalance: user.balance,
+            pixKey: user.pixKey
+        });
+    } catch (err) {
+        console.error('Erro ao processar saque:', err);
+        res.status(500).json({ error: 'Erro ao processar saque' });
+    }
 });
 
 const PORT = process.env.PORT || 3000;

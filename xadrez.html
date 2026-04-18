@@ -4531,7 +4531,7 @@ playFaustao();
             }
 
             if (allMoves.length === 0) {
-                const winner = currentPlayer === 'white' ? 'Pretas' : 'Brancas';
+                const winner = currentPlayer === 'white' ? 'Brancas' : 'Pretas';
                 const isMate = inCheck;
                 
                 if (winner === 'Brancas') {
@@ -4552,6 +4552,18 @@ playFaustao();
                         blackWins: blackWins,
                         winner: winner
                     });
+
+                    // ===== EMITIR RESULTADO DE APOSTA =====
+                    const betId = localStorage.getItem('activeBetId');
+                    if (betId) {
+                        console.log(`[APOSTA] Jogo finalizado - Emitindo betGameEnd: betId=${betId}, winner=${winner}`);
+                        socket.emit('betGameEnd', {
+                            betId: betId,
+                            winner: winner  // "Brancas" ou "Pretas"
+                        });
+                        // Limpa o ID da aposta
+                        localStorage.removeItem('activeBetId');
+                    }
                 }
                 
                 if (isMate) {
@@ -5343,28 +5355,40 @@ playFaustao();
                 document.querySelector('.game-header h1').textContent = `Xadrez - Aposta: R$ ${data.bet.amount}`;
             });
 
-            socket.on('betGameStart', (data) => {
-                console.log('Jogo de aposta iniciado:', data);
-                gameActive = true;
-                gameMode = 'bet';
-                if (currentUser.id === data.challenger.id) {
-                    playerColor = 'white';
-                } else {
-                    playerColor = 'black';
-                }
-                alert('Jogo started! Você é ' + (playerColor === 'white' ? 'BRANCAS' : 'PRETAS'));
-            });
+             socket.on('betGameStart', (data) => {
+                 console.log('Jogo de aposta iniciado:', data);
+                 gameActive = true;
+                 gameMode = 'bet';
+                 
+                 // Armazena o ID da aposta para usar ao terminar o jogo
+                 localStorage.setItem('activeBetId', data.betId);
+                 
+                 if (currentUser.id === data.challenger.id) {
+                     playerColor = 'white';
+                 } else {
+                     playerColor = 'black';
+                 }
+                 alert('Jogo started! Você é ' + (playerColor === 'white' ? 'BRANCAS' : 'PRETAS'));
+             });
 
-            socket.on('betGameFinished', (data) => {
-                const isWinner = data.winner === currentUser.username;
-                if (isWinner) {
-                    alert('🎉 Você venceu a aposta! R$ ' + (data.bet.prizeAmount || 0).toFixed(2));
-                } else {
-                    alert('❌ Você perdeu a aposta.');
-                }
-                gameActive = false;
-                showBets();
-            });
+             socket.on('betGameFinished', (data) => {
+                 console.log('[APOSTA-FINALIZADA]', data);
+                 
+                 // Determina se o usuário venceu
+                 const userWins = data.winner === 'Brancas' ? 
+                     (playerColor === 'white') : (playerColor === 'black');
+                 
+                 if (userWins) {
+                     const prizeAmount = data.bet.prizeAmount || (data.bet.amount * 2 - data.bet.amount * 0.1);
+                     alert(`🎉 Você venceu a aposta! Prêmio: R$ ${prizeAmount.toFixed(2)}`);
+                 } else {
+                     alert('❌ Você perdeu a aposta. Boa sorte na próxima!');
+                 }
+                 gameActive = false;
+                 // Limpa o ID da aposta
+                 localStorage.removeItem('activeBetId');
+                 showBets();
+             });
 
             socket.on('betPaymentConfirmed', (data) => {
                 console.log('[PAGAMENTO-CONFIRMADO]', data);
